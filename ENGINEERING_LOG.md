@@ -197,7 +197,6 @@ None
 - Allowed structured output without inventing an external Pydantic dependency.
 
 ### Deferred By Design
-- The actual Telegram transport layer.
 - Dashboards and views (ECharts, etc.).
 - Preflight.
 
@@ -265,7 +264,11 @@ No `pass`, `TODO`, `FIXME`, or placeholder logic found. All functions fully impl
 - The frontend and actual Telegram worker must be implemented carefully in the next phase to continue avoiding any blocking of the ingestion path.
 
 ### Deferred By Design
-- Commit 6 (Telegram worker).
-- Dashboards/ECharts (UI).
 - Data Replay Mode.
 - Full 6/6 Preflight (Health check currently only tests SQLite).
+
+## Commit 6: Telegram Transport
+Implemented `telegram_worker.py` utilizing Python's built-in `urllib.request` to remain dependency-lean. The worker runs as a daemon thread and is resilient to network timeouts, API 500s, and missing environment variables (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Stale generations are successfully rejected before hitting the network, ensuring complete protection against racing resets. Test coverage added with `urllib.request.urlopen` mocks.
+
+## Frontend UI & Dashboards
+Implemented a responsive, Vanilla CSS dashboard utilizing a Glassmorphism aesthetic and a deep dark mode with glowing neon accents. The UI connects directly to the `/events` SSE stream using `EventSource` to dynamically update ECharts risk gauges, context cards, timelines, and the event log without full page reloads. The backend `/` route was updated to serve the dashboard, and `/api/status` was added for JSON polling.

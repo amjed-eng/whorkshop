@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intruder Invisible | Operations Center</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- ECharts CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-panel main-header">
+            <div class="logo">
+                <h1>INTRUDER <span>INVISIBLE</span></h1>
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span id="connection-status">Live Monitoring</span>
+                </div>
+            </div>
+            <div class="system-state">
+                <span class="label">System State</span>
+                <div id="current-state-badge" class="state-badge normal">NORMAL</div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <main class="dashboard-grid">
+            
+            <!-- Risk Gauge Panel -->
+            <section class="glass-panel widget risk-widget">
+                <h2>Real-time Threat Risk</h2>
+                <div class="widget-content">
+                    <div id="risk-gauge" class="chart-container"></div>
+                </div>
+            </section>
+            
+            <!-- Context Panel -->
+            <section class="glass-panel widget context-widget">
+                <h2>Attack Context</h2>
+                <div class="widget-content">
+                    <div class="context-grid">
+                        <div class="context-item">
+                            <span class="label">Primary Source</span>
+                            <span id="ctx-source" class="value">--</span>
+                        </div>
+                        <div class="context-item">
+                            <span class="label">Current Stage</span>
+                            <span id="ctx-stage" class="value">--</span>
+                        </div>
+                        <div class="context-item">
+                            <span class="label">AI Assessment</span>
+                            <span id="ctx-severity" class="value ai-severity">--</span>
+                        </div>
+                        <div class="context-item">
+                            <span class="label">Generation</span>
+                            <span id="ctx-generation" class="value">0</span>
+                        </div>
+                    </div>
+                    <div class="ai-summary-box">
+                        <h3 id="ai-title">Awaiting Telemetry...</h3>
+                        <p id="ai-summary">No active AI classification.</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Activity Timeline -->
+            <section class="glass-panel widget timeline-widget full-width">
+                <h2>Incident Timeline</h2>
+                <div class="widget-content">
+                    <ul id="timeline-list" class="timeline-list">
+                        <li class="timeline-empty">No active incidents.</li>
+                    </ul>
+                </div>
+            </section>
+            
+            <!-- Raw Events Table -->
+            <section class="glass-panel widget events-widget full-width">
+                <h2>Incoming Telemetry</h2>
+                <div class="widget-content table-responsive">
+                    <table class="events-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Source</th>
+                                <th>Target</th>
+                                <th>Type</th>
+                                <th>Risk Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-body">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+        </main>
+    </div>
+
+    <!-- Main Logic -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

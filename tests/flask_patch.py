@@ -108,4 +108,10 @@ class MockFlaskModule:
     def jsonify(data):
         return jsonify(data)
 
+    @staticmethod
+    def render_template(template_name, **kwargs):
+        # Return a mock HTML response
+        html = f"<html><body>Mock rendered template: {template_name} Intruder Invisible</body></html>"
+        return Response(html, mimetype='text/html')
+
 sys.modules['flask'] = MockFlaskModule()
