@@ -14,8 +14,33 @@ app = Flask(__name__)
 subscribers = []
 subscribers_lock = threading.Lock()
 
-# Queue for AI tasks (used here, properly consumed in Commit 4/5)
+# Queues for background tasks
 ai_queue = queue.Queue()
+telegram_queue = queue.Queue()
+
+def start_background_worker(q, processor_callback, name="BackgroundWorker"):
+    """
+    Generic worker lifecycle that reads from a queue and calls the processor callback.
+    Errors are logged but do not crash the thread.
+    """
+    def worker_loop():
+        while True:
+            try:
+                task = q.get()
+                if task is None:
+                    break
+                try:
+                    processor_callback(task)
+                except Exception as e:
+                    app.logger.error(f"Error in {name}: {e}")
+                finally:
+                    q.task_done()
+            except Exception as e:
+                app.logger.error(f"Queue error in {name}: {e}")
+
+    t = threading.Thread(target=worker_loop, name=name, daemon=True)
+    t.start()
+    return t
 
 # Ensure DB is initialized
 db.init_db()
