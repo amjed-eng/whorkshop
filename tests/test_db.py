@@ -62,5 +62,19 @@ class TestDB(unittest.TestCase):
         reset_demo(self.db_path)
         self.assertEqual(len(get_events(self.db_path)), 0)
 
+    def test_ordering(self):
+        # Even if saved out of order, they should be returned ordered by timestamp ASC, rowid ASC
+        save_event('2026-08-23T00:02:00Z', '10.0.0.2', 'HTTP', 'GET', 'h2', db_path=self.db_path)
+        save_event('2026-08-23T00:01:00Z', '10.0.0.1', 'FTP', 'Connection', 'h1', db_path=self.db_path)
+        
+        events = get_events(self.db_path)
+        self.assertEqual(events[0]['source'], '10.0.0.1')
+        self.assertEqual(events[1]['source'], '10.0.0.2')
+
+    def test_update_ai_classification_invalid_risk(self):
+        rowid = save_event('2026-08-23T00:00:00Z', '192.168.1.100', 'SSH', 'Login', 'h', db_path=self.db_path)
+        with self.assertRaises(ValueError):
+            update_ai_classification(rowid, {}, 150, db_path=self.db_path)
+
 if __name__ == '__main__':
     unittest.main()

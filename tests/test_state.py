@@ -32,12 +32,45 @@ class TestState(unittest.TestCase):
         snapshot = state.get_snapshot()
         self.assertIn("Service Probe", snapshot['timeline'])
         
-        # Event 3 same source
+        # Event 3 same source but BENIGN (Data Read is not intrinsically critical in our generic list unless marked escalation)
         res = state.process_event({"source": "10.0.0.1", "target_service": "MySQL", "event_type": "Data Read"})
-        self.assertEqual(res['risk'], 91)
-        self.assertEqual(res['state'], state.CRITICAL_INTRUSION)
+        self.assertEqual(res['risk'], 48)
+        self.assertEqual(res['state'], state.UNDER_OBSERVATION)
+
+    def test_update_risk_invalid(self):
+        with self.assertRaises(ValueError):
+            state.update_risk(-1)
+        with self.assertRaises(ValueError):
+            state.update_risk(101)
+        with self.assertRaises(ValueError):
+            state.update_risk("high")
+
+    def test_transition_state_invalid(self):
+        with self.assertRaises(ValueError):
+            state.transition_state("UNKNOWN_STATE")
+
+    def test_containment_does_not_duplicate_timeline(self):
+        state.contain_threat()
+        state.contain_threat()
         snapshot = state.get_snapshot()
-        self.assertIn("Escalation", snapshot['timeline'])
+        self.assertEqual(snapshot['timeline'].count("Containment"), 1)
+
+    def test_reset_clears_counters_and_ai(self):
+        state.apply_ai_result({"severity": "HIGH"}, state.get_generation())
+        state.reset_state()
+        snapshot = state.get_snapshot()
+        self.assertIsNone(snapshot['ai_result'])
+        self.assertEqual(snapshot['current_risk'], 0)
+
+    def test_ai_cannot_downgrade_critical(self):
+        res = state.process_event({"source": "192.168.1.50", "target_service": "Admin System", "event_type": "Login"})
+        self.assertEqual(res['state'], state.CRITICAL_INTRUSION)
+        
+        # AI says benign
+        state.apply_ai_result({"severity": "LOW", "risk_score": 10}, state.get_generation())
+        snapshot = state.get_snapshot()
+        self.assertEqual(snapshot['current_state'], state.CRITICAL_INTRUSION)
+        self.assertEqual(snapshot['current_risk'], 91)
 
     def test_sensitive_event(self):
         res = state.process_event({"source": "192.168.1.50", "target_service": "Admin System", "event_type": "Login"})

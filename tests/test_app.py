@@ -42,7 +42,15 @@ class TestApp(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_invalid_webhook_missing_fields(self):
-        resp = self.client.post('/webhook/opencanary', json={"source": "10.0.0.1"})
+        resp = self.client.post('/webhook/opencanary', json={
+            "source": "10.0.0.1", "target_service": "SSH"
+        })
+        self.assertEqual(resp.status_code, 400)
+        
+    def test_invalid_webhook_missing_attempt_count(self):
+        resp = self.client.post('/webhook/opencanary', json={
+            "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t"
+        })
         self.assertEqual(resp.status_code, 400)
 
     def test_valid_webhook(self):
@@ -50,7 +58,10 @@ class TestApp(unittest.TestCase):
             "event_type": "Login Attempt",
             "source": "10.0.0.1",
             "target_service": "SSH",
-            "timestamp": "2026-08-23T00:00:00Z"
+            "timestamp": "2026-08-23T00:00:00Z",
+            "attempt_count": 1,
+            "previous_related_events": [],
+            "current_risk_context": {}
         }
         resp = self.client.post('/webhook/opencanary', json=payload)
         self.assertEqual(resp.status_code, 200)
@@ -74,10 +85,28 @@ class TestApp(unittest.TestCase):
         snapshot = state.get_snapshot()
         self.assertEqual(snapshot["current_state"], state.UNDER_OBSERVATION)
         self.assertEqual(snapshot["current_risk"], 21)
+        
+    def test_hash_stability(self):
+        j1 = {"a": 1, "b": 2}
+        j2 = {"b": 2, "a": 1}
+        self.assertEqual(app.generate_hash(j1), app.generate_hash(j2))
+        
+    def test_db_failure_isolation(self):
+        # Break DB to ensure it returns 500 and doesn't mutate state
+        db.DEFAULT_DB_PATH = "/invalid/path/db.sqlite3"
+        payload = {
+            "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
+            "timestamp": "t", "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+        }
+        resp = self.client.post('/webhook/opencanary', json=payload)
+        self.assertEqual(resp.status_code, 500)
+        self.assertEqual(state.get_snapshot()["current_risk"], 0)
+        self.assertTrue(app.ai_queue.empty())
 
     def test_reset_clears_db_and_increments_gen(self):
         self.client.post('/webhook/opencanary', json={
-            "event_type": "L", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t"
+            "event_type": "L", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t",
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
         })
         
         events = db.get_events(self.db_path)
@@ -106,10 +135,12 @@ class TestApp(unittest.TestCase):
     def test_crime_scene(self):
         # Insert evidence
         self.client.post('/webhook/opencanary', json={
-            "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t1"
+            "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t1",
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
         })
         self.client.post('/webhook/opencanary', json={
-            "event_type": "Admin Access", "source": "10.0.0.1", "target_service": "Admin System", "timestamp": "t2"
+            "event_type": "Admin Access", "source": "10.0.0.1", "target_service": "Admin System", "timestamp": "t2",
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
         })
         
         resp = self.client.post('/crime-scene')

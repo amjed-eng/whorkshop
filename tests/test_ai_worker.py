@@ -20,8 +20,10 @@ class FakeChoice:
 class FakeCompletions:
     def __init__(self, client):
         self.client = client
+        self.last_kwargs = None
         
     def create(self, **kwargs):
+        self.last_kwargs = kwargs
         if self.client.fail_next:
             self.client.fail_next = False
             raise Exception("Mock Groq API Failure")
@@ -90,6 +92,13 @@ class TestAIWorker(unittest.TestCase):
         
         # Check telegram
         self.assertTrue(self.telegram_queue.empty())
+        
+        # Verify kwargs
+        kwargs = self.groq_client.chat.completions.last_kwargs
+        self.assertEqual(kwargs["model"], "openai/gpt-oss-20b")
+        self.assertTrue(kwargs["response_format"]["json_schema"]["strict"])
+        self.assertEqual(kwargs["response_format"]["type"], "json_schema")
+        self.assertEqual(len(kwargs["response_format"]["json_schema"]["schema"]["required"]), 15)
 
     def test_invalid_schema_rejected(self):
         event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
@@ -161,6 +170,19 @@ class TestAIWorker(unittest.TestCase):
         self.assertFalse(self.telegram_queue.empty())
         t_task = self.telegram_queue.get()
         self.assertEqual(t_task["message"], "EMERGENCY: Hack detected")
+
+    def test_telegram_no_enqueue_non_critical_with_alert(self):
+        event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
+        task = {"event_id": event_id, "generation": state.get_generation(), "normalized_event": {}}
+        
+        non_crit_res = self.valid_result.copy()
+        non_crit_res["severity"] = "HIGH"
+        non_crit_res["telegram_alert"] = "Should not alert"
+        
+        self.groq_client.set_response(non_crit_res)
+        self.worker(task)
+        
+        self.assertTrue(self.telegram_queue.empty())
 
     def test_telegram_no_enqueue_critical_empty_alert(self):
         event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)

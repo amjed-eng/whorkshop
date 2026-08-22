@@ -4,13 +4,17 @@ import json
 
 DEFAULT_DB_PATH = 'data/evidence.sqlite3'
 
-def get_connection(db_path=DEFAULT_DB_PATH):
+def get_connection(db_path=None):
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db(db_path=DEFAULT_DB_PATH):
+def init_db(db_path=None):
     """Initialize the database and create the events table."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = get_connection(db_path)
     try:
@@ -30,8 +34,10 @@ def init_db(db_path=DEFAULT_DB_PATH):
     finally:
         conn.close()
 
-def save_event(timestamp: str, source: str, service: str, event_type: str, raw_event_hash: str, risk: int = 0, db_path=DEFAULT_DB_PATH) -> int:
+def save_event(timestamp: str, source: str, service: str, event_type: str, raw_event_hash: str, risk: int = 0, db_path=None) -> int:
     """Save an event and return its rowid."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -44,8 +50,10 @@ def save_event(timestamp: str, source: str, service: str, event_type: str, raw_e
     finally:
         conn.close()
 
-def update_event_risk(event_id: int, risk: int, db_path=DEFAULT_DB_PATH):
+def update_event_risk(event_id: int, risk: int, db_path=None):
     """Update the risk of an event."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     if not isinstance(risk, int) or risk < 0 or risk > 100:
         raise ValueError("Risk must be an integer between 0 and 100.")
     
@@ -59,8 +67,10 @@ def update_event_risk(event_id: int, risk: int, db_path=DEFAULT_DB_PATH):
     finally:
         conn.close()
 
-def update_ai_classification(event_id: int, ai_classification: dict, risk: int, db_path=DEFAULT_DB_PATH):
+def update_ai_classification(event_id: int, ai_classification: dict, risk: int, db_path=None):
     """Update AI classification and risk of an event."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     if not isinstance(risk, int) or risk < 0 or risk > 100:
         raise ValueError("Risk must be an integer between 0 and 100.")
         
@@ -76,8 +86,10 @@ def update_ai_classification(event_id: int, ai_classification: dict, risk: int, 
     finally:
         conn.close()
 
-def get_events(db_path=DEFAULT_DB_PATH) -> list:
+def get_events(db_path=None) -> list:
     """Retrieve all events ordered by timestamp and rowid."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -90,8 +102,10 @@ def get_events(db_path=DEFAULT_DB_PATH) -> list:
     finally:
         conn.close()
 
-def reset_demo(db_path=DEFAULT_DB_PATH):
+def reset_demo(db_path=None):
     """Delete all rows from the events table without deleting the file."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()

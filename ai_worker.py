@@ -79,7 +79,8 @@ def process_ai_task(task: dict, groq_client, telegram_queue, broadcast_callback)
             "previous_related_events", "current_risk_context", "severity", "risk_score",
             "stage", "executive_title", "executive_summary", "business_impact", 
             "recommended_action", "telegram_alert"
-        ]
+        ],
+        "additionalProperties": False
     }
     
     # 2. Call Groq
@@ -93,7 +94,14 @@ def process_ai_task(task: dict, groq_client, telegram_queue, broadcast_callback)
             ],
             model="openai/gpt-oss-20b",
             temperature=0,
-            response_format={"type": "json_object"}
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ai_result",
+                    "schema": schema,
+                    "strict": True
+                }
+            }
         )
         result_text = response.choices[0].message.content
         result = json.loads(result_text)

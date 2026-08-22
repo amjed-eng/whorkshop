@@ -66,7 +66,7 @@ def process_event(event: dict) -> dict:
         else:
             # Same source progression
             _event_count += 1
-            if is_sensitive or _event_count >= 3:
+            if is_sensitive:
                 update_risk(91)
                 transition_state(CRITICAL_INTRUSION)
                 _current_stage = "Escalation"
@@ -76,7 +76,7 @@ def process_event(event: dict) -> dict:
                     if st not in _timeline:
                         _timeline.append(st)
             else:
-                # 2nd event
+                # 2nd or later benign event
                 if _current_risk < 48:
                     update_risk(48)
                 if _current_state == NORMAL:

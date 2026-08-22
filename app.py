@@ -68,6 +68,8 @@ def normalize_event(raw_event: dict) -> dict:
     source = str(raw_event.get("source", "")).strip()
     target_service = str(raw_event.get("target_service", "")).strip()
     timestamp = str(raw_event.get("timestamp", "")).strip()
+    if "attempt_count" not in raw_event:
+        raise ValueError("attempt_count is missing")
     attempt_count = raw_event.get("attempt_count", 1)
     
     if not event_type or not source or not target_service or not timestamp:
@@ -77,16 +79,20 @@ def normalize_event(raw_event: dict) -> dict:
         attempt_count = int(attempt_count)
         if attempt_count < 1:
             raise ValueError
-    except:
+    except Exception:
         raise ValueError("attempt_count must be an integer >= 1")
         
-    previous_related = raw_event.get("previous_related_events", [])
+    if "previous_related_events" not in raw_event:
+        raise ValueError("previous_related_events is missing")
+    previous_related = raw_event.get("previous_related_events")
     if not isinstance(previous_related, list):
-        previous_related = []
+        raise ValueError("previous_related_events must be a list")
         
-    current_risk_ctx = raw_event.get("current_risk_context", {})
+    if "current_risk_context" not in raw_event:
+        raise ValueError("current_risk_context is missing")
+    current_risk_ctx = raw_event.get("current_risk_context")
     if not isinstance(current_risk_ctx, dict):
-        current_risk_ctx = {}
+        raise ValueError("current_risk_context must be a dict")
         
     if "risk_score" in current_risk_ctx:
         try:
