@@ -191,11 +191,11 @@ def events_stream():
         with subscribers_lock:
             subscribers.append(q)
             
-        # Send initial snapshot
-        init_msg = json.dumps({"kind": "STATE", "payload": state.get_snapshot()})
-        yield f"data: {init_msg}\n\n"
-        
         try:
+            # Send initial snapshot
+            init_msg = json.dumps({"kind": "STATE", "payload": state.get_snapshot()})
+            yield f"data: {init_msg}\n\n"
+            
             while True:
                 msg = q.get(timeout=15)
                 yield msg

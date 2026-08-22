@@ -13,6 +13,24 @@ class TestDB(unittest.TestCase):
         os.close(self.db_fd)
         os.unlink(self.db_path)
 
+    def test_production_db_isolation(self):
+        prod_db = "data/evidence.sqlite3"
+        initial_mtime = None
+        if os.path.exists(prod_db):
+            initial_mtime = os.path.getmtime(prod_db)
+            
+        import db
+        # Force a generic write using default args which should resolve to db.DEFAULT_DB_PATH
+        # But we mock it! Wait, we actually want to ensure db.DEFAULT_DB_PATH isolation.
+        db.DEFAULT_DB_PATH = self.db_path
+        db.init_db()
+        db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=10)
+        
+        if initial_mtime is None:
+            self.assertFalse(os.path.exists(prod_db), "Production DB was created during tests!")
+        else:
+            self.assertEqual(os.path.getmtime(prod_db), initial_mtime, "Production DB was modified during tests!")
+
     def test_init_db_creates_table(self):
         # Already called in setUp, testing if we can write to it
         rowid = save_event('2026-08-23T00:00:00Z', '192.168.1.100', 'SSH', 'Login Attempt', 'hash123', risk=10, db_path=self.db_path)

@@ -55,12 +55,23 @@ class TestState(unittest.TestCase):
         snapshot = state.get_snapshot()
         self.assertEqual(snapshot['timeline'].count("Containment"), 1)
 
-    def test_reset_clears_counters_and_ai(self):
+    def test_reset_clears_all_fields(self):
+        # Mutate all state fields
+        state.process_event({"source": "10.0.0.1", "target_service": "SSH", "event_type": "Login"})
         state.apply_ai_result({"severity": "HIGH"}, state.get_generation())
+        gen_before = state.get_generation()
+        
         state.reset_state()
         snapshot = state.get_snapshot()
+        
         self.assertIsNone(snapshot['ai_result'])
         self.assertEqual(snapshot['current_risk'], 0)
+        self.assertEqual(snapshot['current_state'], state.NORMAL)
+        self.assertIsNone(snapshot.get('stage'))
+        self.assertIsNone(snapshot.get('source'))
+        self.assertEqual(snapshot['timeline'], [])
+        self.assertEqual(state._event_count, 0)
+        self.assertGreater(snapshot['generation'], gen_before)
 
     def test_ai_cannot_downgrade_critical(self):
         res = state.process_event({"source": "192.168.1.50", "target_service": "Admin System", "event_type": "Login"})

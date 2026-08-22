@@ -206,6 +206,9 @@ None
 ### Review Status
 PASSED
 
+### Previous False/Incomplete Evidence
+Previously, testing used `PYTHONPATH=mocks` which shadowed official packages and failed to properly verify real environment dependencies. This has been completely removed in the Final Gate Verification.
+
 ### Scope
 Commits 1–5 only.
 

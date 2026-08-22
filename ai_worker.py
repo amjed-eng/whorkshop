@@ -38,6 +38,10 @@ def validate_ai_result(result: dict) -> bool:
     if not (0 <= result["risk_score"] <= 100):
         return False
         
+    expected_keys = set(required_strings + ["attempt_count", "previous_related_events", "current_risk_context", "risk_score"])
+    if set(result.keys()) != expected_keys:
+        return False
+        
     return True
 
 def process_ai_task(task: dict, groq_client, telegram_queue, broadcast_callback):

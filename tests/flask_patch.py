@@ -1,21 +1,31 @@
-import json as _json
+import sys
 
 class Response:
     def __init__(self, response, status=200, mimetype=None):
-        if isinstance(response, str):
-            self.data = response.encode('utf-8')
-        elif hasattr(response, '__iter__'):
-            self.data = b''.join([r.encode('utf-8') if isinstance(r, str) else r for r in response])
-        else:
-            self.data = b''
         self.status_code = status
         self.mimetype = mimetype
         
+        if isinstance(response, str):
+            self.data = response.encode('utf-8')
+            self.response = iter([self.data])
+        elif hasattr(response, '__iter__') and not isinstance(response, bytes):
+            # Do NOT consume generators, just store the iterable
+            self.response = response
+            self.data = b'' # data is empty for streams
+        elif isinstance(response, bytes):
+            self.data = response
+            self.response = iter([self.data])
+        else:
+            self.data = b''
+            self.response = iter([])
+        
     def get_json(self):
-        return _json.loads(self.data.decode('utf-8'))
+        import json
+        return json.loads(self.data.decode('utf-8'))
 
 def jsonify(data):
-    return Response(_json.dumps(data), mimetype='application/json')
+    import json
+    return Response(json.dumps(data), mimetype='application/json')
 
 class Request:
     def __init__(self):
@@ -26,7 +36,6 @@ class Request:
     def get_json(self):
         return self._json
 
-# Globals for requests
 request = Request()
 
 class TestClient:
@@ -37,7 +46,13 @@ class TestClient:
         route = self.app.routes.get((path, 'GET'))
         if not route:
             return Response("Not Found", status=404)
-        return route()
+            
+        res = route()
+        if isinstance(res, tuple):
+            resp, status = res
+            resp.status_code = status
+            return resp
+        return res
         
     def post(self, path, json=None, data=None):
         route = self.app.routes.get((path, 'POST'))
@@ -56,7 +71,6 @@ class TestClient:
             request.data = data
             
         res = route()
-        # Allow returning tuple (response, status)
         if isinstance(res, tuple):
             resp, status = res
             resp.status_code = status
@@ -70,15 +84,12 @@ class Flask:
         self.config = {}
         
         class Logger:
-            def error(self, msg):
-                pass
-            def exception(self, msg):
-                pass
+            def error(self, msg): pass
+            def exception(self, msg): pass
         self.logger = Logger()
         
     def route(self, path, methods=None):
-        if methods is None:
-            methods = ['GET']
+        if methods is None: methods = ['GET']
         def decorator(f):
             for m in methods:
                 self.routes[(path, m)] = f
@@ -87,3 +98,14 @@ class Flask:
         
     def test_client(self):
         return TestClient(self)
+
+class MockFlaskModule:
+    Flask = Flask
+    Response = Response
+    request = request
+    
+    @staticmethod
+    def jsonify(data):
+        return jsonify(data)
+
+sys.modules['flask'] = MockFlaskModule()

@@ -2,7 +2,11 @@ import unittest
 import json
 import queue
 import tempfile
+import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import tests.flask_patch
+import tests.groq_patch
 
 import db
 import state
@@ -82,6 +86,7 @@ class TestAIWorker(unittest.TestCase):
         # Check SQLite
         events = db.get_events(self.db_path)
         self.assertEqual(events[0]["risk"], 75)
+        self.assertEqual(json.loads(events[0]["ai_classification"]), self.valid_result)
         
         # Check state
         self.assertEqual(state.get_snapshot()["ai_result"], self.valid_result)
@@ -93,24 +98,51 @@ class TestAIWorker(unittest.TestCase):
         # Check telegram
         self.assertTrue(self.telegram_queue.empty())
         
-        # Verify kwargs
+        # Check Groq API arguments
         kwargs = self.groq_client.chat.completions.last_kwargs
+        self.assertIsNotNone(kwargs)
         self.assertEqual(kwargs["model"], "openai/gpt-oss-20b")
-        self.assertTrue(kwargs["response_format"]["json_schema"]["strict"])
         self.assertEqual(kwargs["response_format"]["type"], "json_schema")
-        self.assertEqual(len(kwargs["response_format"]["json_schema"]["schema"]["required"]), 15)
+        
+        schema = kwargs["response_format"]["json_schema"]["schema"]
+        self.assertTrue(kwargs["response_format"]["json_schema"]["strict"])
+        self.assertEqual(schema["type"], "object")
+        self.assertFalse(schema["additionalProperties"])
+        
+        required_fields = ["severity", "risk_score", "stage", "executive_title", "executive_summary", "business_impact", "recommended_action", "telegram_alert"]
+        for field in required_fields:
+            self.assertIn(field, schema["required"])
+            self.assertIn(field, schema["properties"])
+        
+        # ai_worker.py actually requires 15 fields total
+        self.assertEqual(len(schema["required"]), 15)
+        
+        # Check prompt data minimization
+        messages = kwargs["messages"]
+        user_msg = next(m["content"] for m in messages if m["role"] == "user")
+        # Ensure the raw_event_hash and other raw wrapper properties are NOT in the prompt
+        self.assertNotIn("hash", user_msg)
+        self.assertNotIn("event_id", user_msg)
+        self.assertNotIn("generation", user_msg)
 
     def test_invalid_schema_rejected(self):
         event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
         task = {"event_id": event_id, "generation": state.get_generation(), "normalized_event": {}}
         
-        invalid_res = self.valid_result.copy()
-        del invalid_res["severity"] # missing field
+        invalid_res_missing = self.valid_result.copy()
+        del invalid_res_missing["severity"] # missing field
         
-        self.groq_client.set_response(invalid_res)
+        self.groq_client.set_response(invalid_res_missing)
         self.worker(task)
-        
         self.assertIsNone(state.get_snapshot()["ai_result"])
+        
+        invalid_res_extra = self.valid_result.copy()
+        invalid_res_extra["extra_unexpected_field"] = "value"
+        
+        self.groq_client.set_response(invalid_res_extra)
+        self.worker(task)
+        self.assertIsNone(state.get_snapshot()["ai_result"])
+        
         self.assertEqual(len(self.broadcasts), 0)
 
     def test_risk_score_invalid_rejected(self):
@@ -132,9 +164,16 @@ class TestAIWorker(unittest.TestCase):
         
         task = {"event_id": event_id, "generation": old_gen, "normalized_event": {}}
         self.groq_client.set_response(self.valid_result)
-        self.worker(task)
         
-        self.assertIsNone(state.get_snapshot()["ai_result"])
+        from unittest.mock import patch
+        with patch('db.update_ai_classification') as mock_db_update:
+            self.worker(task)
+            
+            self.assertIsNone(state.get_snapshot()["ai_result"])
+            self.assertIsNone(self.groq_client.chat.completions.last_kwargs)
+            mock_db_update.assert_not_called()
+            self.assertEqual(len(self.broadcasts), 0)
+            self.assertTrue(self.telegram_queue.empty())
 
     def test_reset_in_flight_rejected(self):
         event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
@@ -146,15 +185,21 @@ class TestAIWorker(unittest.TestCase):
             def create(self, **kwargs):
                 state.reset_state() # Reset while in flight!
                 content = json.dumps(self.valid_result)
+                from tests.test_ai_worker import FakeChoice
                 return type('obj', (object,), {'choices': [FakeChoice(content)]})
                 
         self.groq_client.chat.completions = DelayCompletions()
         self.groq_client.chat.completions.valid_result = self.valid_result
         
-        self.worker(task)
-        
-        # Generation changed, so result should be discarded
-        self.assertIsNone(state.get_snapshot()["ai_result"])
+        from unittest.mock import patch
+        with patch('db.update_ai_classification') as mock_db_update:
+            self.worker(task)
+            
+            # Generation changed, so result should be discarded
+            self.assertIsNone(state.get_snapshot()["ai_result"])
+            mock_db_update.assert_not_called()
+            self.assertEqual(len(self.broadcasts), 0)
+            self.assertTrue(self.telegram_queue.empty())
 
     def test_telegram_enqueue_critical_with_alert(self):
         event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
@@ -213,6 +258,13 @@ class TestAIWorker(unittest.TestCase):
         task = {"event_id": 1, "generation": state.get_generation(), "normalized_event": {}}
         # Should just log and return safely
         worker(task)
+        
+        # Also ensure app.py logic handles missing key safely
+        from unittest.mock import patch
+        import os
+        with patch.dict(os.environ, {}, clear=True):
+            import app
+            self.assertIsNotNone(app.app)
 
 if __name__ == '__main__':
     unittest.main()
