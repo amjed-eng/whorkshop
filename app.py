@@ -54,7 +54,7 @@ def broadcast_message(kind: str, payload: dict):
             try:
                 q.put_nowait(sse_data)
             except queue.Full:
-                pass
+                continue
 
 def generate_hash(raw_event: dict) -> str:
     stable_json = json.dumps(raw_event, sort_keys=True, separators=(',', ':'))
@@ -197,7 +197,7 @@ def events_stream():
             # heartbeat
             yield ": heartbeat\n\n"
         except GeneratorExit:
-            pass
+            return
         finally:
             with subscribers_lock:
                 if q in subscribers:
@@ -247,8 +247,8 @@ def crime_scene():
                     ai_c = json.loads(ev["ai_classification"])
                     if ai_c.get("severity") == "CRITICAL":
                         is_crit = True
-                except:
-                    pass
+                except Exception:
+                    continue
             if is_crit:
                 critical_transition = ev["event_type"]
                 

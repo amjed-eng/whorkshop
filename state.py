@@ -145,7 +145,8 @@ def apply_ai_result(result: dict, result_generation: int) -> bool:
         ai_severity = result.get("severity")
         if _current_state == CRITICAL_INTRUSION and ai_severity != "CRITICAL":
             # Do not allow AI to downgrade a locally determined critical state
-            pass
+            _ai_result = copy.deepcopy(result)
+            return True
         elif ai_severity == "CRITICAL" and _current_state in (NORMAL, UNDER_OBSERVATION):
             transition_state(CRITICAL_INTRUSION)
             update_risk(max(_current_risk, result.get("risk_score", 91)))
