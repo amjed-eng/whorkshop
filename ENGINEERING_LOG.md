@@ -529,3 +529,49 @@ Vanilla HTML/JS/CSS to minimize footprint and maintain security.
 
 ### Deferred By Design
 ECharts visualization deferred to Commit 8.
+
+
+## Commit 8 — ECharts (BLOCKED)
+
+### Goal
+Add local ECharts visualization.
+
+### Status
+BLOCKED
+
+### Reason
+Could not fetch `echarts.min.js` locally due to restricted network environment without internet access. Fake placeholder is explicitly forbidden by the Anti-Laziness protocol. Development for Commit 8 is halted until the actual distribution file is available in the environment.
+
+
+## Commit 9 — Web Audio API
+
+### Goal
+Add resilient critical Web Audio alert.
+
+### Files Created
+- tests/test_audio.py
+
+### Files Modified
+- static/app.js (added AudioContext logic)
+
+### Functions Added
+- armAudio
+- playCriticalAudio
+
+### Routes Added
+None
+
+### Data Flow
+SSE CRITICAL_INTRUSION event -> JS checks audioArmed and lastCriticalAudioGen -> generates native synth beep.
+
+### Security Guarantees
+Requires user interaction (ARM AUDIO) before enabling sound. Native Web Audio API prevents dependencies on external audio files or libraries. Fails gracefully if blocked by browser.
+
+### Tests Added
+Static checks verifying AudioContext is used and no audio files/tags are hardcoded.
+
+### Test Result
+All audio logic tests passed.
+
+### Architectural Decisions
+Synthesized oscillator beeps to ensure zero external dependencies.

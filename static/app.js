@@ -1,11 +1,15 @@
 let audioArmed = false;
-
-document.addEventListener('DOMContentLoaded', () => {
+let audioCtx = null;
+let lastCriticalAudioGen = -1;
+let currentGeneration = 0;
     const sse = new EventSource('/events');
 
     sse.addEventListener('message', (e) => {
         try {
             const data = JSON.parse(e.data);
+            if (data.payload && typeof data.payload.generation !== 'undefined') {
+                currentGeneration = data.payload.generation;
+            }
             if (data.kind === 'STATE') {
                 handleStateUpdate(data.payload);
             } else if (data.kind === 'EVENT') {
@@ -28,6 +32,7 @@ function handleStateUpdate(payload) {
     // Update body state class for critical pulse
     if (payload.current_state === 'CRITICAL_INTRUSION') {
         document.body.classList.add('state-critical');
+        playCriticalAudio();
     } else {
         document.body.classList.remove('state-critical');
     }
@@ -61,6 +66,7 @@ function handleEventUpdate(payload) {
 
     if (payload.current_state === 'CRITICAL_INTRUSION') {
         document.body.classList.add('state-critical');
+        playCriticalAudio();
     }
 }
 
@@ -77,6 +83,7 @@ function handleAiResult(result) {
 }
 
 function handleReset() {
+    lastCriticalAudioGen = -1;
     document.getElementById('kpi-events').textContent = '0';
     document.getElementById('kpi-status').textContent = 'NORMAL';
     document.getElementById('kpi-target').textContent = 'N/A';
@@ -137,9 +144,51 @@ async function resetDemo() {
     }
 }
 
-function armAudio() {
+async function armAudio() {
     audioArmed = true;
     const btn = document.getElementById('btn-arm-audio');
     btn.classList.add('armed');
     btn.textContent = 'AUDIO ARMED';
+    
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+        }
+    } catch (e) {
+        console.error('Failed to init AudioContext', e);
+    }
+}
+
+function playCriticalAudio() {
+    if (!audioArmed || !audioCtx) return;
+    if (lastCriticalAudioGen === currentGeneration) return; // Deduplicate
+    lastCriticalAudioGen = currentGeneration;
+
+    try {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.6);
+    } catch (e) {
+        console.error('Audio playback failed', e);
+    }
 }
