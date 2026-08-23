@@ -23,16 +23,24 @@ def validate_ai_result(result: dict) -> bool:
         if key not in result or not isinstance(result[key], str):
             return False
             
-    if "attempt_count" not in result or not isinstance(result["attempt_count"], int):
+    if "attempt_count" not in result or type(result["attempt_count"]) is not int:
         return False
         
     if "previous_related_events" not in result or not isinstance(result["previous_related_events"], list):
         return False
+    for item in result["previous_related_events"]:
+        if not isinstance(item, str):
+            return False
         
     if "current_risk_context" not in result or not isinstance(result["current_risk_context"], dict):
         return False
+    for k, v in result["current_risk_context"].items():
+        if k != "risk_score":
+            return False
+        if type(v) is not int:
+            return False
         
-    if "risk_score" not in result or not isinstance(result["risk_score"], int):
+    if "risk_score" not in result or type(result["risk_score"]) is not int:
         return False
         
     if not (0 <= result["risk_score"] <= 100):
@@ -67,8 +75,18 @@ def process_ai_task(task: dict, groq_client, telegram_queue, broadcast_callback)
             "target_service": {"type": "string"},
             "timestamp": {"type": "string"},
             "attempt_count": {"type": "integer"},
-            "previous_related_events": {"type": "array"},
-            "current_risk_context": {"type": "object"},
+            "previous_related_events": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "current_risk_context": {
+                "type": "object",
+                "properties": {
+                    "risk_score": {"type": "integer"}
+                },
+                "required": [],
+                "additionalProperties": False
+            },
             "severity": {"type": "string"},
             "risk_score": {"type": "integer"},
             "stage": {"type": "string"},

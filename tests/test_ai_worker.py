@@ -5,8 +5,7 @@ import tempfile
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-import tests.flask_patch
-import tests.groq_patch
+
 
 import db
 import state
@@ -109,13 +108,28 @@ class TestAIWorker(unittest.TestCase):
         self.assertEqual(schema["type"], "object")
         self.assertFalse(schema["additionalProperties"])
         
-        required_fields = ["severity", "risk_score", "stage", "executive_title", "executive_summary", "business_impact", "recommended_action", "telegram_alert"]
-        for field in required_fields:
-            self.assertIn(field, schema["required"])
-            self.assertIn(field, schema["properties"])
+        expected_fields = {
+            "event_type", "source", "target_service", "timestamp", "attempt_count",
+            "previous_related_events", "current_risk_context", "severity", "risk_score",
+            "stage", "executive_title", "executive_summary", "business_impact", 
+            "recommended_action", "telegram_alert"
+        }
+        self.assertEqual(set(schema["required"]), expected_fields)
+        self.assertEqual(set(schema["properties"].keys()), expected_fields)
         
-        # ai_worker.py actually requires 15 fields total
-        self.assertEqual(len(schema["required"]), 15)
+        # Check recursive strict mode
+        def assert_strict_object(obj_schema):
+            self.assertEqual(obj_schema.get("type"), "object")
+            self.assertFalse(obj_schema.get("additionalProperties", True))
+            for prop_name, prop_schema in obj_schema.get("properties", {}).items():
+                if prop_schema.get("type") == "object":
+                    assert_strict_object(prop_schema)
+                elif prop_schema.get("type") == "array":
+                    self.assertIn("items", prop_schema)
+                    if prop_schema["items"].get("type") == "object":
+                        assert_strict_object(prop_schema["items"])
+                        
+        assert_strict_object(schema)
         
         # Check prompt data minimization
         messages = kwargs["messages"]
@@ -253,18 +267,41 @@ class TestAIWorker(unittest.TestCase):
         self.assertIsNone(state.get_snapshot()["ai_result"])
         
     def test_missing_groq_api_key_handled(self):
-        # Pass None to simulate missing key
-        worker = ai_worker.create_worker_callback(self.telegram_queue, self.broadcast_callback, None)
-        task = {"event_id": 1, "generation": state.get_generation(), "normalized_event": {}}
-        # Should just log and return safely
-        worker(task)
-        
-        # Also ensure app.py logic handles missing key safely
         from unittest.mock import patch
         import os
+        import app
+        
         with patch.dict(os.environ, {}, clear=True):
-            import app
-            self.assertIsNotNone(app.app)
+            # 1. Flask import doesn't crash (already imported, but we check if init is safe)
+            # groq_client might be initialized to None in app.py
+            # Let's hit the webhook directly
+            client = app.app.test_client()
+            payload = {
+                "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
+                "timestamp": "2026-08-23T00:00:00Z", "attempt_count": 1,
+                "previous_related_events": [], "current_risk_context": {}
+            }
+            resp = client.post('/webhook/opencanary', json=payload)
+            self.assertEqual(resp.status_code, 200) # Webhook works
+            
+            # Evidence saved
+            events = db.get_events(self.db_path)
+            self.assertEqual(len(events), 1)
+            
+            # Local State moved
+            snapshot = state.get_snapshot()
+            self.assertEqual(snapshot["current_state"], state.UNDER_OBSERVATION)
+            
+            # No AI result
+            self.assertIsNone(snapshot["ai_result"])
+            
+            # Worker logic doesn't crash when passing None client
+            worker = ai_worker.create_worker_callback(self.telegram_queue, self.broadcast_callback, None)
+            task = {"event_id": events[0]["event_id"], "generation": state.get_generation(), "normalized_event": {}}
+            worker(task)
+            
+            # State still has no AI result, meaning no network call was attempted
+            self.assertIsNone(state.get_snapshot()["ai_result"])
 
 if __name__ == '__main__':
     unittest.main()

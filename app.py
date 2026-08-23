@@ -7,6 +7,8 @@ from flask import Flask, request, jsonify, Response
 
 import db
 import state
+import ai_worker
+import os
 
 app = Flask(__name__)
 
@@ -56,6 +58,10 @@ def broadcast_message(kind: str, payload: dict):
             except queue.Full:
                 continue
 
+# Start background AI Worker
+ai_callback = ai_worker.create_worker_callback(telegram_queue, broadcast_message)
+start_background_worker(ai_queue, ai_callback, name="AIWorker")
+
 def generate_hash(raw_event: dict) -> str:
     stable_json = json.dumps(raw_event, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(stable_json.encode('utf-8')).hexdigest()
@@ -64,22 +70,24 @@ def normalize_event(raw_event: dict) -> dict:
     if not isinstance(raw_event, dict):
         raise ValueError("Invalid raw event")
         
-    event_type = str(raw_event.get("event_type", "")).strip()
-    source = str(raw_event.get("source", "")).strip()
-    target_service = str(raw_event.get("target_service", "")).strip()
-    timestamp = str(raw_event.get("timestamp", "")).strip()
+    event_type = raw_event.get("event_type")
+    source = raw_event.get("source")
+    target_service = raw_event.get("target_service")
+    timestamp = raw_event.get("timestamp")
+    
+    if not isinstance(event_type, str) or not event_type.strip():
+        raise ValueError("event_type must be a non-empty string")
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("source must be a non-empty string")
+    if not isinstance(target_service, str) or not target_service.strip():
+        raise ValueError("target_service must be a non-empty string")
+    if not isinstance(timestamp, str) or not timestamp.strip():
+        raise ValueError("timestamp must be a non-empty string")
+        
     if "attempt_count" not in raw_event:
         raise ValueError("attempt_count is missing")
-    attempt_count = raw_event.get("attempt_count", 1)
-    
-    if not event_type or not source or not target_service or not timestamp:
-        raise ValueError("Missing required fields")
-        
-    try:
-        attempt_count = int(attempt_count)
-        if attempt_count < 1:
-            raise ValueError
-    except Exception:
+    attempt_count = raw_event.get("attempt_count")
+    if type(attempt_count) is not int or attempt_count < 1:
         raise ValueError("attempt_count must be an integer >= 1")
         
     if "previous_related_events" not in raw_event:
@@ -95,11 +103,8 @@ def normalize_event(raw_event: dict) -> dict:
         raise ValueError("current_risk_context must be a dict")
         
     if "risk_score" in current_risk_ctx:
-        try:
-            rs = int(current_risk_ctx["risk_score"])
-            if rs < 0 or rs > 100:
-                raise ValueError
-        except:
+        rs = current_risk_ctx["risk_score"]
+        if type(rs) is not int or rs < 0 or rs > 100:
             raise ValueError("risk_score must be an integer between 0 and 100")
             
     return {

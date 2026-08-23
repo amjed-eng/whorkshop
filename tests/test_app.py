@@ -9,8 +9,7 @@ import os
 
 # Inject flask and groq patches before app imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-import tests.flask_patch
-import tests.groq_patch
+
 
 import app
 import db
@@ -78,13 +77,26 @@ class TestApp(unittest.TestCase):
             "previous_related_events": [], "current_risk_context": {}
         }
         cases = [
+            ("event_type", 123),
+            ("event_type", ""),
+            ("source", 123),
+            ("source", ""),
+            ("target_service", []),
+            ("target_service", ""),
+            ("timestamp", 123),
+            ("timestamp", ""),
             ("attempt_count", 0),
-            ("attempt_count", "not_int"),
+            ("attempt_count", -1),
+            ("attempt_count", "1"),
+            ("attempt_count", 1.5),
+            ("attempt_count", True),
             ("previous_related_events", "not_list"),
             ("current_risk_context", "not_dict"),
             ("current_risk_context", {"risk_score": -1}),
             ("current_risk_context", {"risk_score": 101}),
-            ("current_risk_context", {"risk_score": "not_int"})
+            ("current_risk_context", {"risk_score": "50"}),
+            ("current_risk_context", {"risk_score": 50.5}),
+            ("current_risk_context", {"risk_score": True})
         ]
         for field, bad_val in cases:
             with self.subTest(field=field, bad_val=bad_val):
