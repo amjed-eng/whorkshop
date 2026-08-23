@@ -490,3 +490,42 @@ Using standard library urllib for Telegram API HTTP calls to avoid introducing n
 
 ### Deferred By Design
 Frontend is still not implemented.
+
+
+## Commit 7 — UI Dashboard
+
+### Goal
+Add secure SSE dashboard shell without visualization libraries.
+
+### Files Created
+- templates/index.html
+- static/style.css
+- static/app.js
+- tests/test_ui.py
+
+### Files Modified
+- app.py (updated root route)
+
+### Functions Added
+- Frontend JS handlers for SSE events.
+
+### Routes Added
+- GET / (updated to render template)
+
+### Data Flow
+Backend -> SSE -> Frontend JS -> DOM Updates (using textContent)
+
+### Security Guarantees
+Strictly no innerHTML used. No CDNs or external fonts. Data acts as data, not code.
+
+### Tests Added
+5 tests covering template existence, DOM security, no CDN/WebSocket.
+
+### Test Result
+All UI tests pass locally.
+
+### Architectural Decisions
+Vanilla HTML/JS/CSS to minimize footprint and maintain security.
+
+### Deferred By Design
+ECharts visualization deferred to Commit 8.

@@ -1,0 +1,192 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #0d1117;
+    color: #c9d1d9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Layout */
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px;
+    background-color: #161b22;
+    border-bottom: 1px solid #30363d;
+    height: 20%;
+}
+
+.risk-section {
+    flex: 1;
+}
+
+.kpi-cards {
+    display: flex;
+    gap: 15px;
+    flex: 2;
+}
+
+.kpi-card {
+    background-color: #21262d;
+    padding: 15px;
+    border-radius: 6px;
+    flex: 1;
+    text-align: center;
+    border: 1px solid #30363d;
+}
+
+.kpi-card h3 {
+    font-size: 14px;
+    color: #8b949e;
+    margin-bottom: 10px;
+}
+
+.kpi-card p {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+    height: 60%;
+}
+
+.digital-city {
+    flex: 2;
+    padding: 20px;
+    border-right: 1px solid #30363d;
+}
+
+.ai-brief {
+    flex: 1;
+    padding: 20px;
+    background-color: #0d1117;
+}
+
+.chart-container {
+    width: 100%;
+    height: calc(100% - 30px);
+}
+
+.attack-timeline {
+    height: 10%;
+    padding: 10px 20px;
+    background-color: #161b22;
+    border-top: 1px solid #30363d;
+    text-align: center;
+}
+
+.timeline-stages {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.stage {
+    padding: 5px 15px;
+    background-color: #21262d;
+    border-radius: 4px;
+    color: #8b949e;
+    transition: all 0.3s ease;
+}
+
+.stage.active {
+    background-color: #1f6feb;
+    color: #ffffff;
+}
+
+.stage.critical {
+    background-color: #da3633;
+    color: #ffffff;
+}
+
+/* Status colors */
+.status-normal { color: #238636; }
+.status-observed { color: #d29922; }
+.status-critical { color: #da3633; }
+.status-contained { color: #1f6feb; }
+
+/* Pulse animation for critical state */
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(218, 54, 51, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(218, 54, 51, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(218, 54, 51, 0); }
+}
+
+body.state-critical {
+    animation: pulse 2s infinite;
+    border: 2px solid #da3633;
+}
+
+body.executive-mode .digital-city {
+    display: none;
+}
+
+body.executive-mode .ai-brief {
+    flex: 3;
+    font-size: 1.2em;
+}
+
+/* Controls */
+.controls {
+    height: 10%;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 15px;
+    background-color: #0d1117;
+}
+
+button {
+    background-color: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+button:hover {
+    background-color: #30363d;
+}
+
+button:active {
+    background-color: #21262d;
+}
+
+#btn-arm-audio.armed {
+    background-color: #238636;
+    color: white;
+}
+
+/* Crime Scene */
+#crime-scene-panel {
+    position: absolute;
+    top: 20%;
+    left: 20%;
+    width: 60%;
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    padding: 20px;
+    border-radius: 8px;
+    z-index: 100;
+}
+
+#evidence-list li {
+    margin-bottom: 10px;
+    list-style: none;
+}

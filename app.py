@@ -3,7 +3,7 @@ import json
 import hashlib
 import queue
 import threading
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, render_template
 
 import db
 import state
@@ -136,11 +136,7 @@ def normalize_event(raw_event: dict) -> dict:
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({
-        "service": "INTRUDER_INVISIBLE",
-        "status": "online",
-        "current_state": state.get_snapshot()["current_state"]
-    })
+    return render_template("index.html")
 
 @app.route('/health', methods=['GET'])
 def health():

@@ -1,0 +1,145 @@
+let audioArmed = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const sse = new EventSource('/events');
+
+    sse.addEventListener('message', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.kind === 'STATE') {
+                handleStateUpdate(data.payload);
+            } else if (data.kind === 'EVENT') {
+                handleEventUpdate(data.payload);
+            } else if (data.kind === 'AI_RESULT') {
+                handleAiResult(data.payload);
+            } else if (data.kind === 'RESET') {
+                handleReset();
+            }
+        } catch (err) {
+            console.error('Failed to parse SSE data', err);
+        }
+    });
+});
+
+function handleStateUpdate(payload) {
+    document.getElementById('kpi-events').textContent = payload.event_count || 0;
+    document.getElementById('kpi-status').textContent = payload.current_state || 'NORMAL';
+    
+    // Update body state class for critical pulse
+    if (payload.current_state === 'CRITICAL_INTRUSION') {
+        document.body.classList.add('state-critical');
+    } else {
+        document.body.classList.remove('state-critical');
+    }
+
+    if (payload.current_state === 'CONTAINED') {
+        document.getElementById('kpi-status').textContent = 'THREAT CONTAINED';
+        document.body.classList.remove('state-critical');
+    }
+
+    updateTimeline(payload.timeline || []);
+
+    if (payload.ai_result) {
+        handleAiResult(payload.ai_result);
+    }
+}
+
+function handleEventUpdate(payload) {
+    document.getElementById('kpi-events').textContent = payload.event_count;
+    document.getElementById('kpi-status').textContent = payload.current_state;
+    if (payload.raw_event && payload.raw_event.target_service) {
+        document.getElementById('kpi-target').textContent = payload.raw_event.target_service;
+    }
+    
+    // Show AI analyzing
+    const aiIndicator = document.getElementById('ai-status-indicator');
+    aiIndicator.textContent = 'Analyzing with Groq AI...';
+    aiIndicator.classList.remove('hidden');
+    document.getElementById('ai-content').classList.add('hidden');
+
+    updateTimeline(payload.timeline || []);
+
+    if (payload.current_state === 'CRITICAL_INTRUSION') {
+        document.body.classList.add('state-critical');
+    }
+}
+
+function handleAiResult(result) {
+    if (!result) return;
+    document.getElementById('ai-status-indicator').classList.add('hidden');
+    document.getElementById('ai-content').classList.remove('hidden');
+
+    document.getElementById('ai-title').textContent = result.executive_title || 'No Title';
+    document.getElementById('ai-summary').textContent = result.executive_summary || '';
+    document.getElementById('ai-impact').textContent = result.business_impact || '';
+    document.getElementById('ai-action').textContent = result.recommended_action || '';
+    document.getElementById('ai-severity').textContent = result.severity || '';
+}
+
+function handleReset() {
+    document.getElementById('kpi-events').textContent = '0';
+    document.getElementById('kpi-status').textContent = 'NORMAL';
+    document.getElementById('kpi-target').textContent = 'N/A';
+    
+    document.body.classList.remove('state-critical');
+    document.body.classList.remove('executive-mode');
+    document.getElementById('crime-scene-panel').classList.add('hidden');
+    
+    document.getElementById('ai-status-indicator').textContent = 'No active threats.';
+    document.getElementById('ai-status-indicator').classList.remove('hidden');
+    document.getElementById('ai-content').classList.add('hidden');
+    
+    updateTimeline([]);
+}
+
+function updateTimeline(timeline) {
+    document.getElementById('stage-discovery').className = 'stage' + (timeline.includes('Discovery') ? ' active' : '');
+    document.getElementById('stage-probe').className = 'stage' + (timeline.includes('Service Probe') ? ' active' : '');
+    document.getElementById('stage-access').className = 'stage' + (timeline.includes('Access Attempt') ? ' active' : '');
+    document.getElementById('stage-escalation').className = 'stage' + (timeline.includes('Escalation') ? ' critical' : '');
+    document.getElementById('stage-containment').className = 'stage' + (timeline.includes('Containment') ? ' active' : '');
+}
+
+async function isolateThreat() {
+    try {
+        await fetch('/contain', { method: 'POST' });
+    } catch (e) {
+        console.error('Isolation failed', e);
+    }
+}
+
+async function reconstructCrimeScene() {
+    try {
+        const res = await fetch('/crime-scene', { method: 'POST' });
+        const data = await res.json();
+        
+        document.getElementById('cs-first-seen').textContent = data.first_seen || 'N/A';
+        document.getElementById('cs-origin').textContent = data.origin || 'N/A';
+        document.getElementById('cs-first-target').textContent = data.first_target || 'N/A';
+        document.getElementById('cs-sequence').textContent = (data.activity_sequence || []).join(' → ') || 'N/A';
+        document.getElementById('cs-transition').textContent = data.critical_transition || 'N/A';
+        
+        document.getElementById('crime-scene-panel').classList.remove('hidden');
+    } catch (e) {
+        console.error('Crime scene failed', e);
+    }
+}
+
+function toggleExecutiveSummary() {
+    document.body.classList.toggle('executive-mode');
+}
+
+async function resetDemo() {
+    try {
+        await fetch('/demo/reset', { method: 'POST' });
+    } catch (e) {
+        console.error('Reset failed', e);
+    }
+}
+
+function armAudio() {
+    audioArmed = true;
+    const btn = document.getElementById('btn-arm-audio');
+    btn.classList.add('armed');
+    btn.textContent = 'AUDIO ARMED';
+}
