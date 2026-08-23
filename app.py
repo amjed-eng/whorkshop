@@ -149,13 +149,6 @@ def health():
     except Exception as e:
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
-@app.route('/webhook/opencanary', methods=['POST'])
-def webhook_opencanary():
-    if not request.is_json:
-        return jsonify({"error": "Request must be JSON"}), 400
-        
-    raw_event = request.get_json()
-    
 def ingest_event(raw_event):
     normalized = normalize_event(raw_event)
     event_hash = generate_hash(raw_event)
