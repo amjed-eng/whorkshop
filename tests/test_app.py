@@ -38,12 +38,6 @@ class TestApp(unittest.TestCase):
     def test_get_index(self):
         resp = self.client.get('/')
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.mimetype, 'text/html')
-        self.assertIn(b'Intruder Invisible', resp.data)
-
-    def test_get_status(self):
-        resp = self.client.get('/api/status')
-        self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data["service"], "INTRUDER_INVISIBLE")
 

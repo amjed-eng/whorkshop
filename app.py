@@ -3,12 +3,10 @@ import json
 import hashlib
 import queue
 import threading
-from flask import Flask, request, jsonify, Response, render_template
+from flask import Flask, request, jsonify, Response
 
 import db
 import state
-import ai_worker
-import telegram_worker
 
 app = Flask(__name__)
 
@@ -116,10 +114,6 @@ def normalize_event(raw_event: dict) -> dict:
 
 @app.route('/', methods=['GET'])
 def index():
-    return render_template('index.html')
-
-@app.route('/api/status', methods=['GET'])
-def get_status():
     return jsonify({
         "service": "INTRUDER_INVISIBLE",
         "status": "online",
@@ -284,11 +278,4 @@ def executive_mode():
     return jsonify({"status": "executive_mode"})
 
 if __name__ == '__main__':
-    # Start background workers
-    ai_callback = ai_worker.create_worker_callback(telegram_queue, broadcast_message)
-    start_background_worker(ai_queue, ai_callback, "AIWorker")
-    
-    tg_callback = telegram_worker.create_worker_callback()
-    start_background_worker(telegram_queue, tg_callback, "TelegramWorker")
-    
-    app.run(debug=True, threaded=True, use_reloader=False)
+    app.run(debug=True, threaded=True)
