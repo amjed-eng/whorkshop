@@ -173,11 +173,7 @@ def ingest_event(raw_event):
     # Broadcast immediate event
     broadcast_message("EVENT", {
         "event_id": event_id, 
-        "normalized": normalized, 
-        "attempt_count": normalized["attempt_count"], 
-        "current_state": snap["current_state"], 
-        "raw_event": raw_event,
-        "timeline": snap["timeline"]
+        "normalized": normalized
     })
     broadcast_message("STATE", snap)
     
