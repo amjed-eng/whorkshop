@@ -144,6 +144,14 @@ async function resetDemo() {
     }
 }
 
+async function replayEvent(num) {
+    try {
+        await fetch('/demo/replay/' + num, { method: 'POST' });
+    } catch (e) {
+        console.error('Replay failed', e);
+    }
+}
+
 async function armAudio() {
     audioArmed = true;
     const btn = document.getElementById('btn-arm-audio');

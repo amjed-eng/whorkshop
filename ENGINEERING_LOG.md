@@ -575,3 +575,69 @@ All audio logic tests passed.
 
 ### Architectural Decisions
 Synthesized oscillator beeps to ensure zero external dependencies.
+
+
+## Commit 10 — Demo Replay Mode
+
+### Goal
+Add shared-pipeline demo replay mode without polluting JS with payloads or circumventing backend logic.
+
+### Files Created
+- replay.py
+- replay/events.json
+- tests/test_replay.py
+
+### Files Modified
+- app.py (extracted ingest_event, added /demo/replay)
+- static/app.js (added replayEvent)
+- templates/index.html (added replay buttons)
+
+### Functions Added
+- ingest_event
+- load_replay_events
+- get_replay_event
+- replayEvent (JS)
+
+### Routes Added
+- POST /demo/replay/<int:event_number>
+
+### Data Flow
+UI Button -> POST /demo/replay/N -> load from events.json -> ingest_event -> SQLite -> State -> SSE -> UI
+
+### Security Guarantees
+Replay uses identical normalization, hashing, SQLite storage, and state machine transitions as live webhook events. UI cannot spoof raw events.
+
+### Tests Added
+10 test cases in test_replay.py covering JSON loading, risk sequence (21->48->91), and queue task submission.
+
+### Test Result
+All tests logically complete.
+
+### Architectural Decisions
+Extracted `ingest_event` to ensure Replay and Live paths perfectly mirror each other.
+
+## Phase 2 Acceptance — Commits 6–10
+
+### Status
+PASSED (Exception for ECharts)
+
+### Commit 6 Telegram Verification
+Completed asynchronous worker with deduplication and failure isolation.
+
+### Commit 7 SSE Dashboard Verification
+Completed robust full-screen UI powered by SSE with zero `innerHTML`.
+
+### Commit 8 ECharts Verification
+BLOCKED. Anti-laziness protocol enforced to prevent fake distributions.
+
+### Commit 9 Audio Verification
+Completed native Web Audio API integration requiring user interaction.
+
+### Commit 10 Replay Verification
+Completed shared-pipeline replay using strictly identical `ingest_event`.
+
+### Security Verification
+No CDNs. No innerHTML. No external JS libraries. No exposed API keys in UI.
+
+### Remaining Deferred Work
+- ECharts visualization.

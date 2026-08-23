@@ -10,6 +10,9 @@ import state
 import ai_worker
 import telegram_worker
 
+import os
+import replay
+
 app = Flask(__name__)
 
 # Simple SSE Subscribers
@@ -153,53 +156,81 @@ def webhook_opencanary():
         
     raw_event = request.get_json()
     
-    try:
-        normalized = normalize_event(raw_event)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-        
+def ingest_event(raw_event):
+    normalized = normalize_event(raw_event)
     event_hash = generate_hash(raw_event)
     
+    # Save to DB first
+    event_id = db.save_event(
+        timestamp=normalized["timestamp"],
+        source=normalized["source"],
+        service=normalized["target_service"],
+        event_type=normalized["event_type"],
+        raw_event_hash=event_hash,
+        risk=0
+    )
+    
+    # Process locally
+    local_res = state.process_event(normalized)
+    
+    # Update DB risk
+    db.update_event_risk(event_id, local_res["risk"])
+    
+    snap = state.get_snapshot()
+    # Broadcast immediate event
+    broadcast_message("EVENT", {
+        "event_id": event_id, 
+        "normalized": normalized, 
+        "event_count": snap["event_count"], 
+        "current_state": snap["current_state"], 
+        "raw_event": raw_event,
+        "timeline": snap["timeline"]
+    })
+    broadcast_message("STATE", snap)
+    
+    # Enqueue for AI
+    gen = snap["generation"]
+    ai_queue.put({
+        "event_id": event_id,
+        "generation": gen,
+        "normalized_event": normalized,
+        "raw_event_hash": event_hash
+    })
+    
+    return {
+        "accepted": True,
+        "event_id": event_id,
+        "generation": gen,
+        "state": local_res["state"],
+        "risk": local_res["risk"]
+    }
+
+@app.route('/webhook/opencanary', methods=['POST'])
+def webhook_opencanary():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+        
+    raw_event = request.get_json()
+    
     try:
-        # Save to DB first
-        event_id = db.save_event(
-            timestamp=normalized["timestamp"],
-            source=normalized["source"],
-            service=normalized["target_service"],
-            event_type=normalized["event_type"],
-            raw_event_hash=event_hash,
-            risk=0
-        )
-        
-        # Process locally
-        local_res = state.process_event(normalized)
-        
-        # Update DB risk
-        db.update_event_risk(event_id, local_res["risk"])
-        
-        # Broadcast immediate event
-        broadcast_message("EVENT", {"event_id": event_id, "normalized": normalized})
-        broadcast_message("STATE", state.get_snapshot())
-        
-        # Enqueue for AI
-        gen = state.get_generation()
-        ai_queue.put({
-            "event_id": event_id,
-            "generation": gen,
-            "normalized_event": normalized,
-            "raw_event_hash": event_hash
-        })
-        
-        return jsonify({
-            "accepted": True,
-            "event_id": event_id,
-            "generation": gen,
-            "state": local_res["state"],
-            "risk": local_res["risk"]
-        })
-        
+        res = ingest_event(raw_event)
+        return jsonify(res)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         app.logger.error(f"Failed to process webhook: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+
+@app.route('/demo/replay/<int:event_number>', methods=['POST'])
+def replay_event_route(event_number):
+    try:
+        raw_event = replay.get_replay_event(event_number)
+        res = ingest_event(raw_event)
+        return jsonify(res)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        app.logger.error(f"Failed to process replay: {e}")
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/events', methods=['GET'])

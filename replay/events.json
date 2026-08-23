@@ -1,0 +1,38 @@
+[
+  {
+    "event_type": "Login Attempt",
+    "source": "10.0.0.99",
+    "target_service": "Web Service",
+    "timestamp": "2026-08-23T10:00:00Z",
+    "attempt_count": 1,
+    "previous_related_events": [],
+    "current_risk_context": {
+      "risk_score": 0,
+      "stage": "Discovery"
+    }
+  },
+  {
+    "event_type": "Port Scan",
+    "source": "10.0.0.99",
+    "target_service": "Web Service",
+    "timestamp": "2026-08-23T10:05:00Z",
+    "attempt_count": 100,
+    "previous_related_events": ["10.0.0.99 Login Attempt at Web Service"],
+    "current_risk_context": {
+      "risk_score": 21,
+      "stage": "Service Probe"
+    }
+  },
+  {
+    "event_type": "Privilege Escalation",
+    "source": "10.0.0.99",
+    "target_service": "Admin System",
+    "timestamp": "2026-08-23T10:15:00Z",
+    "attempt_count": 5,
+    "previous_related_events": ["10.0.0.99 Port Scan at Web Service"],
+    "current_risk_context": {
+      "risk_score": 48,
+      "stage": "Access Attempt"
+    }
+  }
+]
