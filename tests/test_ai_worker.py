@@ -66,7 +66,7 @@ class TestAIWorker(unittest.TestCase):
         self.valid_result = {
             "event_type": "Login", "source": "10.0.0.1", "target_service": "SSH",
             "timestamp": "t", "attempt_count": 1, "previous_related_events": [],
-            "current_risk_context": {}, "severity": "HIGH", "risk_score": 75,
+            "current_risk_context": {"risk_score": 0, "stage": "initial"}, "severity": "HIGH", "risk_score": 75,
             "stage": "Discovery", "executive_title": "Title", "executive_summary": "Sum",
             "business_impact": "Impact", "recommended_action": "Action", "telegram_alert": ""
         }
@@ -121,7 +121,13 @@ class TestAIWorker(unittest.TestCase):
         def assert_strict_object(obj_schema):
             self.assertEqual(obj_schema.get("type"), "object")
             self.assertFalse(obj_schema.get("additionalProperties", True))
-            for prop_name, prop_schema in obj_schema.get("properties", {}).items():
+            
+            # Check set(required) == set(properties.keys())
+            props = obj_schema.get("properties", {})
+            required = obj_schema.get("required", [])
+            self.assertEqual(set(required), set(props.keys()))
+            
+            for prop_name, prop_schema in props.items():
                 if prop_schema.get("type") == "object":
                     assert_strict_object(prop_schema)
                 elif prop_schema.get("type") == "array":
@@ -143,20 +149,44 @@ class TestAIWorker(unittest.TestCase):
         event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
         task = {"event_id": event_id, "generation": state.get_generation(), "normalized_event": {}}
         
-        invalid_res_missing = self.valid_result.copy()
-        del invalid_res_missing["severity"] # missing field
+        required_fields = [
+            "event_type", "source", "target_service", "timestamp", "attempt_count",
+            "previous_related_events", "current_risk_context", "severity", "risk_score",
+            "stage", "executive_title", "executive_summary", "business_impact", 
+            "recommended_action", "telegram_alert"
+        ]
         
-        self.groq_client.set_response(invalid_res_missing)
-        self.worker(task)
-        self.assertIsNone(state.get_snapshot()["ai_result"])
-        
-        invalid_res_extra = self.valid_result.copy()
-        invalid_res_extra["extra_unexpected_field"] = "value"
-        
-        self.groq_client.set_response(invalid_res_extra)
-        self.worker(task)
-        self.assertIsNone(state.get_snapshot()["ai_result"])
-        
+        for field in required_fields:
+            with self.subTest(missing_field=field):
+                invalid_res = self.valid_result.copy()
+                del invalid_res[field]
+                self.groq_client.set_response(invalid_res)
+                self.worker(task)
+                self.assertIsNone(state.get_snapshot()["ai_result"])
+                
+        # Test missing nested context
+        with self.subTest(missing_field="current_risk_context.risk_score"):
+            invalid_res = self.valid_result.copy()
+            invalid_res["current_risk_context"] = {"stage": "Discovery"}
+            self.groq_client.set_response(invalid_res)
+            self.worker(task)
+            self.assertIsNone(state.get_snapshot()["ai_result"])
+            
+        with self.subTest(missing_field="current_risk_context.stage"):
+            invalid_res = self.valid_result.copy()
+            invalid_res["current_risk_context"] = {"risk_score": 75}
+            self.groq_client.set_response(invalid_res)
+            self.worker(task)
+            self.assertIsNone(state.get_snapshot()["ai_result"])
+            
+        # Extra field
+        with self.subTest(extra_field=True):
+            invalid_res_extra = self.valid_result.copy()
+            invalid_res_extra["extra_unexpected_field"] = "value"
+            self.groq_client.set_response(invalid_res_extra)
+            self.worker(task)
+            self.assertIsNone(state.get_snapshot()["ai_result"])
+            
         self.assertEqual(len(self.broadcasts), 0)
 
     def test_risk_score_invalid_rejected(self):
@@ -272,32 +302,13 @@ class TestAIWorker(unittest.TestCase):
         import app
         
         with patch.dict(os.environ, {}, clear=True):
-            # 1. Flask import doesn't crash (already imported, but we check if init is safe)
-            # groq_client might be initialized to None in app.py
-            # Let's hit the webhook directly
-            client = app.app.test_client()
-            payload = {
-                "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
-                "timestamp": "2026-08-23T00:00:00Z", "attempt_count": 1,
-                "previous_related_events": [], "current_risk_context": {}
-            }
-            resp = client.post('/webhook/opencanary', json=payload)
-            self.assertEqual(resp.status_code, 200) # Webhook works
-            
-            # Evidence saved
-            events = db.get_events(self.db_path)
-            self.assertEqual(len(events), 1)
-            
-            # Local State moved
-            snapshot = state.get_snapshot()
-            self.assertEqual(snapshot["current_state"], state.UNDER_OBSERVATION)
-            
-            # No AI result
-            self.assertIsNone(snapshot["ai_result"])
-            
-            # Worker logic doesn't crash when passing None client
+            # Worker logic doesn't crash when passing None client due to missing key
             worker = ai_worker.create_worker_callback(self.telegram_queue, self.broadcast_callback, None)
-            task = {"event_id": events[0]["event_id"], "generation": state.get_generation(), "normalized_event": {}}
+            
+            event_id = db.save_event("t", "10.0.0.1", "SSH", "Login", "hash", risk=21)
+            task = {"event_id": event_id, "generation": state.get_generation(), "normalized_event": {}}
+            
+            # This should safely return without network exception
             worker(task)
             
             # State still has no AI result, meaning no network call was attempted

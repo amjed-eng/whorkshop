@@ -3,5 +3,7 @@ __pycache__/
 .venv/
 venv/
 test_env/
+test_venv/
 data/*.sqlite3
 tests/data/*.sqlite3
+tests/*.diff

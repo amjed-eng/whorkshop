@@ -61,7 +61,7 @@ class TestApp(unittest.TestCase):
         base_payload = {
             "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
             "timestamp": "2026-08-23T00:00:00Z", "attempt_count": 1,
-            "previous_related_events": [], "current_risk_context": {}
+            "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         }
         for field in ["event_type", "source", "target_service", "timestamp", "attempt_count", "previous_related_events", "current_risk_context"]:
             with self.subTest(field=field):
@@ -74,7 +74,7 @@ class TestApp(unittest.TestCase):
         base_payload = {
             "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
             "timestamp": "2026-08-23T00:00:00Z", "attempt_count": 1,
-            "previous_related_events": [], "current_risk_context": {}
+            "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         }
         cases = [
             ("event_type", 123),
@@ -113,7 +113,7 @@ class TestApp(unittest.TestCase):
             "timestamp": "2026-08-23T00:00:00Z",
             "attempt_count": 1,
             "previous_related_events": [],
-            "current_risk_context": {}
+            "current_risk_context": {"risk_score": 0, "stage": "initial"}
         }
         resp = self.client.post('/webhook/opencanary', json=payload)
         self.assertEqual(resp.status_code, 200)
@@ -144,7 +144,7 @@ class TestApp(unittest.TestCase):
         payload = {
             "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
             "timestamp": "2026-08-23T00:00:00Z", "attempt_count": 1,
-            "previous_related_events": [], "current_risk_context": {}
+            "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         }
         
         with patch('app.normalize_event', side_effect=app.normalize_event) as mock_normalize, \
@@ -193,7 +193,7 @@ class TestApp(unittest.TestCase):
         db.DEFAULT_DB_PATH = "/invalid/path/db.sqlite3"
         payload = {
             "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
-            "timestamp": "t", "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "timestamp": "t", "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         }
         from unittest.mock import patch
         with patch('app.broadcast_message') as mock_broadcast:
@@ -206,7 +206,7 @@ class TestApp(unittest.TestCase):
     def test_reset_clears_db_and_increments_gen(self):
         self.client.post('/webhook/opencanary', json={
             "event_type": "L", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t",
-            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         })
         
         events = db.get_events(self.db_path)
@@ -251,7 +251,7 @@ class TestApp(unittest.TestCase):
     def test_crime_scene_no_critical(self):
         self.client.post('/webhook/opencanary', json={
             "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t1",
-            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         })
         resp = self.client.post('/crime-scene')
         data = resp.get_json()
@@ -260,7 +260,7 @@ class TestApp(unittest.TestCase):
     def test_crime_scene_local_critical(self):
         self.client.post('/webhook/opencanary', json={
             "event_type": "Admin Access", "source": "10.0.0.1", "target_service": "Admin System", "timestamp": "t1",
-            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         })
         resp = self.client.post('/crime-scene')
         data = resp.get_json()
@@ -270,7 +270,7 @@ class TestApp(unittest.TestCase):
         # Insert a benign event that gets AI escalated
         resp_webhook = self.client.post('/webhook/opencanary', json={
             "event_type": "Data Read", "source": "10.0.0.1", "target_service": "MySQL", "timestamp": "t1",
-            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         })
         event_id = resp_webhook.get_json()["event_id"]
         
@@ -287,11 +287,11 @@ class TestApp(unittest.TestCase):
         # Insert evidence in specific order to test SQLite ordering
         self.client.post('/webhook/opencanary', json={
             "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH", "timestamp": "t1",
-            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         })
         self.client.post('/webhook/opencanary', json={
             "event_type": "Port Scan", "source": "10.0.0.1", "target_service": "Web", "timestamp": "t2",
-            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {}
+            "attempt_count": 1, "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
         })
         
         resp = self.client.post('/crime-scene')
@@ -317,6 +317,8 @@ class TestApp(unittest.TestCase):
         
         # First yield should be the init snapshot
         first_frame = next(generator)
+        if isinstance(first_frame, bytes):
+            first_frame = first_frame.decode('utf-8')
         self.assertTrue(first_frame.startswith("data: "))
         self.assertTrue(first_frame.endswith("\n\n"))
         
@@ -362,8 +364,85 @@ class TestApp(unittest.TestCase):
         
         # Stop worker
         q.put(None)
-        t.join(timeout=1)
+        t.join(timeout=2)
         self.assertFalse(t.is_alive())
+
+    def test_start_runtime_workers_idempotent(self):
+        # Case A — First startup
+        app._worker_started = False
+        app._ai_thread = None
+        
+        t1 = app.start_runtime_workers()
+        self.assertIsNotNone(t1)
+        self.assertTrue(t1.is_alive())
+        
+        # Case B — Repeated startup while alive
+        t2 = app.start_runtime_workers()
+        self.assertIs(t1, t2)
+        
+        t3 = app.start_runtime_workers()
+        self.assertIs(t1, t3)
+        
+        # Case C — Dead worker
+        app.ai_queue.put(None)
+        t1.join(timeout=2)
+        self.assertFalse(t1.is_alive())
+        
+        t4 = app.start_runtime_workers()
+        self.assertIsNot(t1, t4)
+        self.assertTrue(t4.is_alive())
+        
+        # Cleanup
+        app.ai_queue.put(None)
+        t4.join(timeout=2)
+
+    def test_missing_groq_api_key_flask_integration(self):
+        from unittest.mock import patch
+        import os
+        
+        # Completely clear the environment, guaranteeing GROQ_API_KEY is absent
+        with patch.dict(os.environ, {}, clear=True):
+            # Make sure worker is stopped
+            if app._ai_thread and app._ai_thread.is_alive():
+                app.ai_queue.put(None)
+                app._ai_thread.join(timeout=2)
+            
+            app._worker_started = False
+            app._ai_thread = None
+            
+            # Start runtime workers
+            app.start_runtime_workers()
+            
+            # Hit the webhook
+            payload = {
+                "event_type": "Login Attempt", "source": "10.0.0.1", "target_service": "SSH",
+                "timestamp": "2026-08-23T00:00:00Z", "attempt_count": 1,
+                "previous_related_events": [], "current_risk_context": {"risk_score": 0, "stage": "initial"}
+            }
+            resp = self.client.post('/webhook/opencanary', json=payload)
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data["accepted"])
+            
+            # Verify SQLite
+            events = db.get_events(self.db_path)
+            self.assertEqual(len(events), 1)
+            
+            # Verify Local State
+            snapshot = state.get_snapshot()
+            self.assertEqual(snapshot["current_state"], state.UNDER_OBSERVATION)
+            self.assertIsNone(snapshot["ai_result"])
+            
+            # Wait briefly to ensure AI task was processed and handled gracefully by the worker thread
+            import time
+            time.sleep(0.1)
+            
+            # Still no AI result because GROQ_API_KEY is missing
+            self.assertIsNone(state.get_snapshot()["ai_result"])
+            
+            # Cleanup worker
+            app.ai_queue.put(None)
+            app._ai_thread.join(timeout=2)
 
 if __name__ == '__main__':
     unittest.main()

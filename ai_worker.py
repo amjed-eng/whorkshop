@@ -34,11 +34,13 @@ def validate_ai_result(result: dict) -> bool:
         
     if "current_risk_context" not in result or not isinstance(result["current_risk_context"], dict):
         return False
-    for k, v in result["current_risk_context"].items():
-        if k != "risk_score":
-            return False
-        if type(v) is not int:
-            return False
+    crc = result["current_risk_context"]
+    if "risk_score" not in crc or type(crc["risk_score"]) is not int or not (0 <= crc["risk_score"] <= 100):
+        return False
+    if "stage" not in crc or not isinstance(crc["stage"], str):
+        return False
+    if set(crc.keys()) != {"risk_score", "stage"}:
+        return False
         
     if "risk_score" not in result or type(result["risk_score"]) is not int:
         return False
@@ -82,9 +84,10 @@ def process_ai_task(task: dict, groq_client, telegram_queue, broadcast_callback)
             "current_risk_context": {
                 "type": "object",
                 "properties": {
-                    "risk_score": {"type": "integer"}
+                    "risk_score": {"type": "integer"},
+                    "stage": {"type": "string"}
                 },
-                "required": [],
+                "required": ["risk_score", "stage"],
                 "additionalProperties": False
             },
             "severity": {"type": "string"},

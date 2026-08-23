@@ -30,6 +30,7 @@ def start_background_worker(q, processor_callback, name="BackgroundWorker"):
             try:
                 task = q.get()
                 if task is None:
+                    q.task_done()
                     break
                 try:
                     processor_callback(task)
@@ -58,9 +59,20 @@ def broadcast_message(kind: str, payload: dict):
             except queue.Full:
                 continue
 
-# Start background AI Worker
-ai_callback = ai_worker.create_worker_callback(telegram_queue, broadcast_message)
-start_background_worker(ai_queue, ai_callback, name="AIWorker")
+_worker_lock = threading.Lock()
+_worker_started = False
+_ai_thread = None
+
+def start_runtime_workers():
+    global _worker_started, _ai_thread
+    with _worker_lock:
+        if _ai_thread is not None and _ai_thread.is_alive():
+            return _ai_thread
+            
+        ai_callback = ai_worker.create_worker_callback(telegram_queue, broadcast_message)
+        _ai_thread = start_background_worker(ai_queue, ai_callback, name="AIWorker")
+        _worker_started = True
+    return _ai_thread
 
 def generate_hash(raw_event: dict) -> str:
     stable_json = json.dumps(raw_event, sort_keys=True, separators=(',', ':'))
@@ -102,10 +114,11 @@ def normalize_event(raw_event: dict) -> dict:
     if not isinstance(current_risk_ctx, dict):
         raise ValueError("current_risk_context must be a dict")
         
-    if "risk_score" in current_risk_ctx:
-        rs = current_risk_ctx["risk_score"]
-        if type(rs) is not int or rs < 0 or rs > 100:
-            raise ValueError("risk_score must be an integer between 0 and 100")
+    if "risk_score" not in current_risk_ctx or type(current_risk_ctx["risk_score"]) is not int or current_risk_ctx["risk_score"] < 0 or current_risk_ctx["risk_score"] > 100:
+        raise ValueError("risk_score must be an integer between 0 and 100")
+        
+    if "stage" not in current_risk_ctx or not isinstance(current_risk_ctx["stage"], str):
+        raise ValueError("stage must be a string")
             
     return {
         "event_type": event_type,
@@ -283,4 +296,5 @@ def executive_mode():
     return jsonify({"status": "executive_mode"})
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True)
+    start_runtime_workers()
+    app.run(debug=False, threaded=True, use_reloader=False)
