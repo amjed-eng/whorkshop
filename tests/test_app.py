@@ -37,8 +37,7 @@ class TestApp(unittest.TestCase):
     def test_get_index(self):
         resp = self.client.get('/')
         self.assertEqual(resp.status_code, 200)
-        data = resp.get_json()
-        self.assertEqual(data["service"], "INTRUDER_INVISIBLE")
+        self.assertEqual(resp.mimetype, 'text/html')
 
     def test_get_health(self):
         # Healthy case

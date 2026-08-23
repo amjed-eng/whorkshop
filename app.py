@@ -174,7 +174,7 @@ def ingest_event(raw_event):
     broadcast_message("EVENT", {
         "event_id": event_id, 
         "normalized": normalized, 
-        "event_count": snap["event_count"], 
+        "attempt_count": normalized["attempt_count"], 
         "current_state": snap["current_state"], 
         "raw_event": raw_event,
         "timeline": snap["timeline"]
@@ -191,6 +191,7 @@ def ingest_event(raw_event):
     })
     
     return {
+        "status": "success",
         "accepted": True,
         "event_id": event_id,
         "generation": gen,
