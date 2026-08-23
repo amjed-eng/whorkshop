@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify, Response
 import db
 import state
 import ai_worker
-import os
+import telegram_worker
 
 app = Flask(__name__)
 
@@ -62,15 +62,19 @@ def broadcast_message(kind: str, payload: dict):
 _worker_lock = threading.Lock()
 _worker_started = False
 _ai_thread = None
+_telegram_thread = None
 
 def start_runtime_workers():
-    global _worker_started, _ai_thread
+    global _worker_started, _ai_thread, _telegram_thread
     with _worker_lock:
-        if _ai_thread is not None and _ai_thread.is_alive():
-            return _ai_thread
+        if _ai_thread is None or not _ai_thread.is_alive():
+            ai_callback = ai_worker.create_worker_callback(telegram_queue, broadcast_message)
+            _ai_thread = start_background_worker(ai_queue, ai_callback, name="AIWorker")
             
-        ai_callback = ai_worker.create_worker_callback(telegram_queue, broadcast_message)
-        _ai_thread = start_background_worker(ai_queue, ai_callback, name="AIWorker")
+        if _telegram_thread is None or not _telegram_thread.is_alive():
+            telegram_callback = telegram_worker.create_telegram_worker_callback()
+            _telegram_thread = start_background_worker(telegram_queue, telegram_callback, name="TelegramWorker")
+            
         _worker_started = True
     return _ai_thread
 
@@ -233,6 +237,7 @@ def events_stream():
 def reset_demo_route():
     state.reset_state()
     db.reset_demo()
+    telegram_worker.reset_deduplication()
     snapshot = state.get_snapshot()
     broadcast_message("RESET", snapshot)
     return jsonify({"status": "reset", "generation": snapshot["generation"]})

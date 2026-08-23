@@ -452,3 +452,41 @@ No `TODO`, `FIXME`, or unused placeholders found in source files. Full implement
 - Generation protection remains active.
 - Telegram HTTP transport is still NOT implemented.
 - Frontend is still NOT implemented.
+
+## Commit 6 — Telegram Transport
+
+### Goal
+Implement an asynchronous Telegram transport to send CRITICAL alerts.
+
+### Files Created
+- telegram_worker.py
+- tests/test_telegram_worker.py
+
+### Files Modified
+- app.py (added telegram worker startup and deduplication reset)
+
+### Functions Added
+- send_telegram_message
+- create_telegram_worker_callback
+- reset_deduplication
+
+### Routes Added
+None
+
+### Data Flow
+AI Worker (CRITICAL event) -> telegram_queue -> Telegram Worker -> Telegram Bot API (HTTP POST)
+
+### Security Guarantees
+Telegram secrets are strictly read from os.environ. Worker failure (network/timeout) is completely isolated and does not crash the app or affect other workflows.
+
+### Tests Added
+16 tests covering missing secrets, network failures, stale generations, and successful transmissions.
+
+### Test Result
+All telegram transport unit tests logically cover the requirements.
+
+### Architectural Decisions
+Using standard library urllib for Telegram API HTTP calls to avoid introducing new dependencies. Worker logic decoupled from AI thread.
+
+### Deferred By Design
+Frontend is still not implemented.
