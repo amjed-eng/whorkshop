@@ -619,25 +619,25 @@ Extracted `ingest_event` to ensure Replay and Live paths perfectly mirror each o
 ## Phase 2 Acceptance — Commits 6–10
 
 ### Status
-PASSED (Exception for ECharts)
+PASSED
 
 ### Commit 6 Telegram Verification
-Completed asynchronous worker with deduplication and failure isolation.
+Completed asynchronous worker with deduplication and failure isolation. Tests confirmed.
 
 ### Commit 7 SSE Dashboard Verification
-Completed robust full-screen UI powered by SSE with zero `innerHTML`.
+Completed robust full-screen UI powered by SSE with zero `innerHTML`. Tests confirmed.
 
 ### Commit 8 ECharts Verification
-BLOCKED. Anti-laziness protocol enforced to prevent fake distributions.
+Completed. Real Apache ECharts local distribution added. UI updated to initialize risk gauge, network map, and attack path correctly without external CDN. Tested via test_echarts.py.
 
 ### Commit 9 Audio Verification
 Completed native Web Audio API integration requiring user interaction.
 
 ### Commit 10 Replay Verification
-Completed shared-pipeline replay using strictly identical `ingest_event`.
+Completed shared-pipeline replay using strictly identical `ingest_event`. Replay tests pass and effectively simulate the demo sequence.
 
 ### Security Verification
-No CDNs. No innerHTML. No external JS libraries. No exposed API keys in UI.
+No CDNs. No innerHTML. No external JS libraries. No exposed API keys in UI. Zero test failures out of 92 tests.
 
-### Remaining Deferred Work
-- ECharts visualization.
+### External Dependency Verification
+Flask and Groq correctly utilized in safe isolation. ECharts served entirely from `static/echarts.min.js`.

@@ -2,8 +2,55 @@ let audioArmed = false;
 let audioCtx = null;
 let lastCriticalAudioGen = -1;
 let currentGeneration = 0;
-    const sse = new EventSource('/events');
 
+let riskGaugeChart = null;
+let networkMapChart = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Risk Gauge
+    const gaugeDom = document.getElementById('risk-gauge');
+    if (gaugeDom && window.echarts) {
+        riskGaugeChart = echarts.init(gaugeDom);
+        riskGaugeChart.setOption({
+            series: [{
+                type: 'gauge',
+                progress: { show: true },
+                detail: { valueAnimation: true, formatter: '{value}' },
+                data: [{ value: 0, name: 'Risk' }]
+            }]
+        });
+    }
+
+    // Initialize Network Map
+    const mapDom = document.getElementById('network-map');
+    if (mapDom && window.echarts) {
+        networkMapChart = echarts.init(mapDom);
+        networkMapChart.setOption({
+            series: [{
+                type: 'graph',
+                layout: 'force',
+                roam: true,
+                label: { show: true, position: 'right' },
+                force: { repulsion: 200, edgeLength: 100 },
+                data: [
+                    { name: 'Internet' },
+                    { name: 'Gateway' },
+                    { name: 'Web Service' },
+                    { name: 'File Service' },
+                    { name: 'Admin System' },
+                    { name: 'Digital Vault' }
+                ],
+                links: []
+            }]
+        });
+    }
+
+    window.addEventListener('resize', () => {
+        if (riskGaugeChart) riskGaugeChart.resize();
+        if (networkMapChart) networkMapChart.resize();
+    });
+
+    const sse = new EventSource('/events');
     sse.addEventListener('message', (e) => {
         try {
             const data = JSON.parse(e.data);
@@ -36,6 +83,8 @@ function handleStateUpdate(payload) {
     } else {
         document.body.classList.remove('state-critical');
     }
+    
+    updateCharts(payload);
 
     if (payload.current_state === 'CONTAINED') {
         document.getElementById('kpi-status').textContent = 'THREAT CONTAINED';
@@ -68,6 +117,8 @@ function handleEventUpdate(payload) {
         document.body.classList.add('state-critical');
         playCriticalAudio();
     }
+    
+    updateCharts({ current_risk: payload.current_risk, raw_event: payload.raw_event });
 }
 
 function handleAiResult(result) {
@@ -97,6 +148,34 @@ function handleReset() {
     document.getElementById('ai-content').classList.add('hidden');
     
     updateTimeline([]);
+    
+    if (riskGaugeChart) {
+        riskGaugeChart.setOption({
+            series: [{ data: [{ value: 0, name: 'Risk' }] }]
+        });
+    }
+    if (networkMapChart) {
+        networkMapChart.setOption({
+            series: [{ links: [] }]
+        });
+    }
+}
+
+function updateCharts(payload) {
+    if (riskGaugeChart && payload.current_risk !== undefined) {
+        riskGaugeChart.setOption({
+            series: [{ data: [{ value: payload.current_risk, name: 'Risk' }] }]
+        });
+    }
+    if (networkMapChart && payload.raw_event && payload.raw_event.source && payload.raw_event.target_service) {
+        const source = 'Internet';
+        const target = payload.raw_event.target_service;
+        networkMapChart.setOption({
+            series: [{
+                links: [{ source: source, target: target }]
+            }]
+        });
+    }
 }
 
 function updateTimeline(timeline) {

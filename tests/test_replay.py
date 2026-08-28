@@ -84,5 +84,64 @@ class TestReplayMode(unittest.TestCase):
         self.client.post('/demo/replay/1')
         self.assertFalse(app.ai_queue.empty())
 
+    def test_replay_endpoint_invokes_ingest_event(self):
+        from unittest.mock import patch
+        with patch('app.ingest_event') as mock_ingest:
+            mock_ingest.return_value = {"status": "success", "event_id": 999}
+            resp = self.client.post('/demo/replay/1')
+            self.assertEqual(resp.status_code, 200)
+            mock_ingest.assert_called_once()
+            
+    def test_sse_broadcast_occurs(self):
+        from unittest.mock import patch
+        with patch('app.broadcast_message') as mock_broadcast:
+            self.client.post('/demo/replay/1')
+            mock_broadcast.assert_any_call('EVENT', unittest.mock.ANY)
+            mock_broadcast.assert_any_call('STATE', unittest.mock.ANY)
+            
+    def test_replay_no_synchronous_groq_telegram(self):
+        from unittest.mock import patch
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            self.client.post('/demo/replay/1')
+            mock_urlopen.assert_not_called()
+            
+    def test_old_generation_ai_rejected_in_replay_context(self):
+        # Even in replay context, if generation is old, state machine should reject it
+        self.client.post('/demo/replay/1')
+        snap = state.get_snapshot()
+        old_gen = snap["generation"]
+        
+        # Reset advances generation
+        self.client.post('/demo/reset')
+        
+        # Try to apply ai result for old generation
+        state.apply_ai_result({"severity": "CRITICAL"}, old_gen)
+        new_snap = state.get_snapshot()
+        self.assertIsNone(new_snap.get("ai_result"))
+        
+    def test_old_generation_telegram_rejected_in_replay_context(self):
+        import telegram_worker
+        from unittest.mock import patch
+        
+        self.client.post('/demo/replay/1')
+        snap = state.get_snapshot()
+        old_gen = snap["generation"]
+        
+        self.client.post('/demo/reset')
+        
+        task = {
+            "event_id": 1,
+            "generation": old_gen,
+            "message": "CRITICAL from Old Gen"
+        }
+        
+        callback = telegram_worker.create_telegram_worker_callback()
+        
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "T", "TELEGRAM_CHAT_ID": "C"}):
+                callback(task)
+                # Should discard due to old generation without calling network
+                mock_urlopen.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main()
