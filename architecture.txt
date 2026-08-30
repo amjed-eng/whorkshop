@@ -2,18 +2,10 @@
 ├── ai_worker.py
 ├── app.py
 ├── architecture.txt
-├── data
-│   └── evidence.sqlite3
 ├── db.py
 ├── ENGINEERING_LOG.md
 ├── PHASE_2_EXECUTION_PLAN.md
 ├── prompt.py
-├── __pycache__
-│   ├── ai_worker.cpython-312.pyc
-│   ├── app.cpython-312.pyc
-│   ├── db.cpython-312.pyc
-│   ├── prompt.cpython-312.pyc
-│   └── state.cpython-312.pyc
 ├── replay
 │   └── events.json
 ├── replay.py
@@ -21,60 +13,21 @@
 ├── state.py
 ├── static
 │   ├── app.js
+│   ├── echarts.min.js
 │   └── style.css
 ├── telegram_worker.py
 ├── templates
 │   └── index.html
-├── test_env
-│   ├── bin
-│   │   ├── python -> python3
-│   │   ├── python3 -> /usr/bin/python3
-│   │   └── python3.12 -> python3
-│   ├── include
-│   │   └── python3.12
-│   ├── lib
-│   │   └── python3.12
-│   │       └── site-packages
-│   ├── lib64 -> lib
-│   └── pyvenv.cfg
-├── tests
-│   ├── __pycache__
-│   │   ├── test_ai_worker.cpython-312.pyc
-│   │   ├── test_app.cpython-312.pyc
-│   │   ├── test_db.cpython-312.pyc
-│   │   ├── test_state.cpython-312.pyc
-│   │   └── test_telegram_worker.cpython-312.pyc
-│   ├── test_ai_worker.py
-│   ├── test_app.py
-│   ├── test_audio.py
-│   ├── test_db.py
-│   ├── test_replay.py
-│   ├── test_state.py
-│   ├── test_telegram_worker.py
-│   └── test_ui.py
-├── test_venv
-│   ├── bin
-│   │   ├── python -> python3
-│   │   ├── python3 -> /usr/bin/python3
-│   │   └── python3.12 -> python3
-│   ├── include
-│   │   └── python3.12
-│   ├── lib
-│   │   └── python3.12
-│   │       └── site-packages
-│   ├── lib64 -> lib
-│   └── pyvenv.cfg
-└── venv
-    ├── bin
-    │   ├── python -> /usr/bin/python
-    │   ├── python3 -> python
-    │   └── python3.12 -> python
-    ├── include
-    │   └── python3.12
-    ├── lib
-    │   └── python3.12
-    │       └── site-packages
-    ├── lib64 -> lib
-    └── pyvenv.cfg
+└── tests
+    ├── test_ai_worker.py
+    ├── test_app.py
+    ├── test_audio.py
+    ├── test_db.py
+    ├── test_echarts.py
+    ├── test_replay.py
+    ├── test_state.py
+    ├── test_telegram_worker.py
+    ├── test_timeline.py
+    └── test_ui.py
 
-32 directories, 46 files
+5 directories, 26 files

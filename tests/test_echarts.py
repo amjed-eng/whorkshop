@@ -59,13 +59,34 @@ class TestECharts(unittest.TestCase):
         with open(js_path, 'r', encoding='utf-8') as f:
             content = f.read()
             
-        # The logic for EVENT should handle risk updates and graph updates before AI
-        # We can look for signs that EVENT block updates chart directly
-        # Typically checking "case 'EVENT':" block
-        idx = content.find('case \'EVENT\':')
-        if idx != -1:
-            event_block = content[idx:content.find('break;', idx)]
-            self.assertIn('setOption', event_block, "EVENT rendering must not wait for AI_RESULT")
+        # Typically checking "data.kind === 'EVENT'" block and ensuring updateCharts is called there
+        idx = content.find("if (data.kind === 'EVENT')")
+        self.assertNotEqual(idx, -1, "Must have an event handler block")
+        
+        # We also need to check that updateCharts is called inside handleEventUpdate
+        handle_idx = content.find('function handleEventUpdate')
+        self.assertNotEqual(handle_idx, -1, "Must have handleEventUpdate function")
+        
+        # Check that updateCharts is called within handleEventUpdate
+        next_func = content.find('function ', handle_idx + 10)
+        if next_func == -1: next_func = len(content)
+        handle_block = content[handle_idx:next_func]
+        self.assertIn('updateCharts', handle_block, "EVENT rendering must not wait for AI_RESULT")
+
+    def test_dynamic_source_node_added(self):
+        js_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'app.js')
+        with open(js_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        update_charts_idx = content.find('function updateCharts')
+        self.assertNotEqual(update_charts_idx, -1)
+        next_func = content.find('function ', update_charts_idx + 10)
+        if next_func == -1: next_func = len(content)
+        block = content[update_charts_idx:next_func]
+        
+        # Verify it checks if the node exists or dynamically adds it
+        self.assertIn('nodes.push', block, "Must dynamically push external source node")
+        self.assertIn('data: nodes', block, "Must pass the updated nodes array to setOption")
 
 if __name__ == '__main__':
     unittest.main()

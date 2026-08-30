@@ -5,6 +5,7 @@ let currentGeneration = 0;
 
 let riskGaugeChart = null;
 let networkMapChart = null;
+let timelineChart = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize Risk Gauge
@@ -45,9 +46,37 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Initialize Timeline Chart
+    const timelineDom = document.getElementById('timeline-chart');
+    if (timelineDom && window.echarts) {
+        timelineChart = echarts.init(timelineDom);
+        timelineChart.setOption({
+            grid: { left: '10%', right: '10%', top: '20%', bottom: '20%' },
+            xAxis: {
+                type: 'category',
+                data: ['Discovery', 'Service Probe', 'Access Attempt', 'Escalation', 'Containment'],
+                axisLine: { lineStyle: { color: '#00ffcc' } },
+                axisLabel: { color: '#00ffcc', interval: 0 }
+            },
+            yAxis: { type: 'value', show: false, min: 0, max: 1 },
+            series: [{
+                type: 'scatter',
+                symbolSize: 25,
+                data: [
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } }
+                ]
+            }]
+        });
+    }
+
     window.addEventListener('resize', () => {
         if (riskGaugeChart) riskGaugeChart.resize();
         if (networkMapChart) networkMapChart.resize();
+        if (timelineChart) timelineChart.resize();
     });
 
     const sse = new EventSource('/events');
@@ -99,10 +128,8 @@ function handleStateUpdate(payload) {
 }
 
 function handleEventUpdate(payload) {
-    document.getElementById('kpi-events').textContent = payload.event_count;
-    document.getElementById('kpi-status').textContent = payload.current_state;
-    if (payload.raw_event && payload.raw_event.target_service) {
-        document.getElementById('kpi-target').textContent = payload.raw_event.target_service;
+    if (payload.normalized && payload.normalized.target_service) {
+        document.getElementById('kpi-target').textContent = payload.normalized.target_service;
     }
     
     // Show AI analyzing
@@ -118,7 +145,13 @@ function handleEventUpdate(payload) {
         playCriticalAudio();
     }
     
-    updateCharts({ current_risk: payload.current_risk, raw_event: payload.raw_event });
+    if (payload.normalized) {
+        updateCharts({
+            current_risk: payload.current_risk, 
+            source: payload.normalized.source, 
+            target_service: payload.normalized.target_service
+        });
+    }
 }
 
 function handleAiResult(result) {
@@ -159,6 +192,19 @@ function handleReset() {
             series: [{ links: [] }]
         });
     }
+    if (timelineChart) {
+        timelineChart.setOption({
+            series: [{
+                data: [
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } },
+                    { value: 0, itemStyle: { color: '#555' } }
+                ]
+            }]
+        });
+    }
 }
 
 function updateCharts(payload) {
@@ -167,11 +213,27 @@ function updateCharts(payload) {
             series: [{ data: [{ value: payload.current_risk, name: 'Risk' }] }]
         });
     }
-    if (networkMapChart && payload.raw_event && payload.raw_event.source && payload.raw_event.target_service) {
-        const source = 'Internet';
-        const target = payload.raw_event.target_service;
+    if (networkMapChart && payload.source && payload.target_service) {
+        const source = payload.source;
+        const target = payload.target_service;
+        
+        const baseNodes = [
+            { name: 'Internet' },
+            { name: 'Gateway' },
+            { name: 'Web Service' },
+            { name: 'File Service' },
+            { name: 'Admin System' },
+            { name: 'Digital Vault' }
+        ];
+        
+        const nodes = [...baseNodes];
+        if (!nodes.find(n => n.name === source)) {
+            nodes.push({ name: source, itemStyle: { color: '#ff4444' } });
+        }
+
         networkMapChart.setOption({
             series: [{
+                data: nodes,
                 links: [{ source: source, target: target }]
             }]
         });
@@ -179,11 +241,22 @@ function updateCharts(payload) {
 }
 
 function updateTimeline(timeline) {
-    document.getElementById('stage-discovery').className = 'stage' + (timeline.includes('Discovery') ? ' active' : '');
-    document.getElementById('stage-probe').className = 'stage' + (timeline.includes('Service Probe') ? ' active' : '');
-    document.getElementById('stage-access').className = 'stage' + (timeline.includes('Access Attempt') ? ' active' : '');
-    document.getElementById('stage-escalation').className = 'stage' + (timeline.includes('Escalation') ? ' critical' : '');
-    document.getElementById('stage-containment').className = 'stage' + (timeline.includes('Containment') ? ' active' : '');
+    if (!timelineChart) return;
+    
+    const stages = ['Discovery', 'Service Probe', 'Access Attempt', 'Escalation', 'Containment'];
+    const data = stages.map(stage => {
+        if (timeline.includes(stage)) {
+            if (stage === 'Escalation') {
+                return { value: 0, itemStyle: { color: '#ff003c' } };
+            }
+            return { value: 0, itemStyle: { color: '#00ffcc' } };
+        }
+        return { value: 0, itemStyle: { color: '#555' } };
+    });
+
+    timelineChart.setOption({
+        series: [{ data: data }]
+    });
 }
 
 async function isolateThreat() {

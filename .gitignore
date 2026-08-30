@@ -7,3 +7,5 @@ test_venv/
 data/*.sqlite3
 tests/data/*.sqlite3
 tests/*.diff
+*.diff
+test_out.txt
