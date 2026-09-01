@@ -7,82 +7,147 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <!-- Top: Security Risk -->
-    <header class="dashboard-header">
-        <div class="risk-section">
-            <h2>SECURITY RISK</h2>
-            <div id="risk-gauge" class="chart-container"></div>
-        </div>
-        <div class="kpi-cards">
-            <div class="kpi-card">
-                <h3>Events Detected</h3>
-                <p id="kpi-events">0</p>
-            </div>
-            <div class="kpi-card">
-                <h3>Most Targeted Asset</h3>
-                <p id="kpi-target">N/A</p>
-            </div>
-            <div class="kpi-card">
-                <h3>Detection Time</h3>
-                <p id="kpi-time">LIVE</p>
-            </div>
-            <div class="kpi-card">
-                <h3>Containment Status</h3>
-                <p id="kpi-status">NORMAL</p>
-            </div>
-        </div>
-    </header>
+    <div class="cyber-shell">
+        <main class="dashboard-surface" aria-label="Intruder Invisible security dashboard">
+            <header class="dashboard-header">
+                <div class="brand-block">
+                    <span class="eyebrow">LIVE SECURITY OPERATIONS</span>
+                    <div class="brand-row">
+                        <span class="brand-mark" aria-hidden="true">II</span>
+                        <div>
+                            <h1>INTRUDER INVISIBLE</h1>
+                            <p class="brand-subtitle">Digital City Threat Observatory</p>
+                        </div>
+                    </div>
+                </div>
 
-    <div class="main-content">
-        <!-- Left/Center: Digital City -->
-        <section class="digital-city">
-            <h2>DIGITAL CITY</h2>
-            <div id="network-map" class="chart-container"></div>
+                <div class="risk-section panel-surface">
+                    <div class="panel-heading">
+                        <span class="panel-index">01</span>
+                        <h2>SECURITY RISK</h2>
+                        <span class="live-chip">LIVE</span>
+                    </div>
+                    <div id="risk-gauge" class="chart-container risk-chart"></div>
+                </div>
+
+                <div class="kpi-cards" aria-label="Security metrics">
+                    <article class="kpi-card">
+                        <span class="kpi-label">Events Detected</span>
+                        <p id="kpi-events">0</p>
+                    </article>
+                    <article class="kpi-card">
+                        <span class="kpi-label">Most Targeted Asset</span>
+                        <p id="kpi-target">N/A</p>
+                    </article>
+                    <article class="kpi-card">
+                        <span class="kpi-label">Detection Time</span>
+                        <p id="kpi-time">LIVE</p>
+                    </article>
+                    <article class="kpi-card status-card">
+                        <span class="kpi-label">Containment Status</span>
+                        <p id="kpi-status">NORMAL</p>
+                    </article>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <section class="digital-city panel-surface">
+                    <div class="panel-heading">
+                        <span class="panel-index">02</span>
+                        <h2>DIGITAL CITY</h2>
+                        <span class="panel-meta">NETWORK TOPOLOGY</span>
+                    </div>
+                    <div id="network-map" class="chart-container network-chart"></div>
+                </section>
+
+                <aside class="ai-brief panel-surface">
+                    <div class="panel-heading">
+                        <span class="panel-index">03</span>
+                        <h2>AI EXECUTIVE BRIEF</h2>
+                    </div>
+                    <div id="ai-status-indicator" class="ai-status">No active threats.</div>
+                    <div id="ai-content" class="ai-content hidden">
+                        <h3 id="ai-title"></h3>
+                        <dl class="brief-grid">
+                            <div>
+                                <dt>Summary</dt>
+                                <dd><span id="ai-summary"></span></dd>
+                            </div>
+                            <div>
+                                <dt>Business Impact</dt>
+                                <dd><span id="ai-impact"></span></dd>
+                            </div>
+                            <div>
+                                <dt>Recommended Action</dt>
+                                <dd><span id="ai-action"></span></dd>
+                            </div>
+                            <div>
+                                <dt>Severity</dt>
+                                <dd><span id="ai-severity"></span></dd>
+                            </div>
+                        </dl>
+                    </div>
+                </aside>
+            </div>
+
+            <section class="attack-timeline panel-surface">
+                <div class="panel-heading timeline-heading">
+                    <span class="panel-index">04</span>
+                    <h2>ATTACK TIMELINE</h2>
+                    <span class="panel-meta">DISCOVERY → CONTAINMENT</span>
+                </div>
+                <div id="timeline-chart" class="chart-container timeline-chart"></div>
+            </section>
+        </main>
+
+        <section class="presenter-console" aria-label="Presenter controls">
+            <div class="console-title">
+                <span class="console-pulse" aria-hidden="true"></span>
+                <div>
+                    <span class="eyebrow">PRESENTER CONSOLE</span>
+                    <strong>CONTROL PLANE</strong>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="control-group replay-controls" aria-label="Replay events">
+                    <span class="control-group-label">REPLAY</span>
+                    <button id="btn-replay-1" onclick="replayEvent(1)">EVENT 1</button>
+                    <button id="btn-replay-2" onclick="replayEvent(2)">EVENT 2</button>
+                    <button id="btn-replay-3" onclick="replayEvent(3)">EVENT 3</button>
+                </div>
+                <div class="control-divider" aria-hidden="true"></div>
+                <div class="control-group response-controls" aria-label="Threat response controls">
+                    <span class="control-group-label">RESPONSE</span>
+                    <button id="btn-isolate" class="action-danger" onclick="isolateThreat()">ISOLATE THREAT</button>
+                    <button id="btn-crime-scene" onclick="reconstructCrimeScene()">RECONSTRUCT CRIME SCENE</button>
+                    <button id="btn-executive" onclick="toggleExecutiveSummary()">EXECUTIVE SUMMARY</button>
+                </div>
+                <div class="control-divider" aria-hidden="true"></div>
+                <div class="control-group system-controls" aria-label="System controls">
+                    <span class="control-group-label">SYSTEM</span>
+                    <button id="btn-arm-audio" onclick="armAudio()">ARM AUDIO</button>
+                    <button id="btn-reset" class="action-reset" onclick="resetDemo()">RESET DEMO</button>
+                </div>
+            </div>
         </section>
+    </div>
 
-        <!-- Right: AI Executive Brief -->
-        <aside class="ai-brief">
-            <h2>AI EXECUTIVE BRIEF</h2>
-            <div id="ai-status-indicator">No active threats.</div>
-            <div id="ai-content" class="hidden">
-                <h3 id="ai-title"></h3>
-                <p><strong>Summary:</strong> <span id="ai-summary"></span></p>
-                <p><strong>Impact:</strong> <span id="ai-impact"></span></p>
-                <p><strong>Recommendation:</strong> <span id="ai-action"></span></p>
-                <p><strong>Severity:</strong> <span id="ai-severity"></span></p>
+    <section id="crime-scene-panel" class="crime-scene-panel hidden" aria-live="polite">
+        <div class="crime-scene-header">
+            <div>
+                <span class="eyebrow">FORENSIC RECONSTRUCTION</span>
+                <h2>RECONSTRUCTED CRIME SCENE</h2>
             </div>
-        </aside>
-    </div>
-
-    <!-- Bottom: Attack Timeline -->
-    <footer class="attack-timeline">
-        <h2>ATTACK TIMELINE</h2>
-        <div id="timeline-chart" class="chart-container" style="height: 120px;"></div>
-    </footer>
-
-    <!-- Crime Scene Evidence Container -->
-    <div id="crime-scene-panel" class="hidden">
-        <h2>RECONSTRUCTED CRIME SCENE</h2>
-        <ul id="evidence-list">
-            <li><strong>First Seen:</strong> <span id="cs-first-seen"></span></li>
-            <li><strong>Origin Observed First:</strong> <span id="cs-origin"></span></li>
-            <li><strong>First Target:</strong> <span id="cs-first-target"></span></li>
-            <li><strong>Activity Sequence:</strong> <span id="cs-sequence"></span></li>
-            <li><strong>Critical Transition:</strong> <span id="cs-transition"></span></li>
+            <span class="evidence-badge">SQLITE EVIDENCE</span>
+        </div>
+        <ul id="evidence-list" class="evidence-list">
+            <li><strong>First Seen</strong><span id="cs-first-seen"></span></li>
+            <li><strong>Origin Observed First</strong><span id="cs-origin"></span></li>
+            <li><strong>First Target</strong><span id="cs-first-target"></span></li>
+            <li><strong>Activity Sequence</strong><span id="cs-sequence"></span></li>
+            <li><strong>Critical Transition</strong><span id="cs-transition"></span></li>
         </ul>
-    </div>
-
-    <!-- Controls -->
-    <div class="controls">
-        <button id="btn-replay-1" onclick="replayEvent(1)">EVENT 1</button>
-        <button id="btn-replay-2" onclick="replayEvent(2)">EVENT 2</button>
-        <button id="btn-replay-3" onclick="replayEvent(3)">EVENT 3</button>
-        <button id="btn-isolate" onclick="isolateThreat()">ISOLATE THREAT</button>
-        <button id="btn-crime-scene" onclick="reconstructCrimeScene()">RECONSTRUCT CRIME SCENE</button>
-        <button id="btn-executive" onclick="toggleExecutiveSummary()">EXECUTIVE SUMMARY</button>
-        <button id="btn-reset" onclick="resetDemo()">RESET DEMO</button>
-        <button id="btn-arm-audio" onclick="armAudio()">ARM AUDIO</button>
-    </div>
+    </section>
 
     <script src="/static/echarts.min.js"></script>
     <script src="/static/app.js"></script>

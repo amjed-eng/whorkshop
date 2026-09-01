@@ -747,3 +747,53 @@ NOT EXECUTED
 
 ### Final Verdict
 REPLAY READY — LIVE UNAVAILABLE
+
+## Holistic Alert-Logic & UI Hardening Audit — 2026-09-01
+
+### Scope
+Full source review focused on real alert-processing behaviour, state correlation, SSE resilience, dashboard safety, and presentation layout. Existing architectural constraints (Flask/SQLite/SSE/local ECharts/no frontend framework/no CDN/no `innerHTML`) were preserved.
+
+### State Detection Hardening
+- Reworked `state.py` so `_is_sensitive_event()` no longer depends on one flat keyword list.
+- Added grouped signals for critical assets, high-impact actions, reconnaissance/port scanning, authentication attacks, exploit attempts, and availability attacks.
+- Added behavioural corroboration using `attempt_count`, `previous_related_events`, and `current_risk_context.risk_score` without allowing the upstream risk context to cause a critical transition by itself.
+- Nmap/port scans are immediately recognized as hostile reconnaissance and move the local state to observation/risk 48 rather than being ignored until event ordering happens to escalate them.
+- High-impact activity and strongly correlated high-volume activity can move directly to CRITICAL_INTRUSION/risk 91.
+- Added per-source correlation counters so interleaved sources do not erase one another's history.
+- Prevented a new benign source from lowering an already-critical risk score/stage.
+- Added total `event_count` and `most_targeted_asset` to the state snapshot for truthful KPI rendering.
+- Existing 21 -> 48 -> 91 replay behaviour remains intact and a generic third benign event does not become critical solely by count.
+
+### Runtime / SSE Hardening
+- Fixed `/events` heartbeat lifecycle so an idle SSE connection continues after each 15-second heartbeat instead of ending after the first queue timeout.
+- Removed a duplicate `os` import from `app.py`.
+
+### Frontend Hardening & Redesign
+- Rebuilt `templates/index.html` and `static/style.css` as a cyberpunk dark operations dashboard using only local/system assets.
+- Presenter controls now occupy a dedicated layout row outside all ECharts panels, preventing control/chart overlap.
+- Preserved all existing DOM IDs used by tests and JavaScript.
+- No Bootstrap, Tailwind, CDN, external font, `innerHTML`, `outerHTML`, or `insertAdjacentHTML` was introduced.
+- `static/app.js` now renders the truthful event count and most-targeted asset from backend state.
+- Executive Summary now invokes the real `/executive` backend route rather than only toggling local CSS.
+- Web Audio is marked armed only after AudioContext creation/resume succeeds; unavailable audio fails visually safe.
+- Network visualization maps common real service names (HTTP/HTTPS, FTP/SMB/NFS, SSH/RDP, etc.) to logical city assets and preserves unknown targets as explicit dynamic nodes.
+- EVENT frames no longer clear timeline/state fields that are intentionally delivered by the following STATE frame.
+
+### Tests Added
+`tests/test_state_detection.py` adds five regression tests covering:
+1. first-event Nmap/SYN scanning,
+2. high-volume vendor-specific suspicious activity,
+3. correlated high-volume/contextual escalation without relying on a known keyword,
+4. preservation of CRITICAL risk across a new benign source,
+5. event count and most-targeted-asset snapshot metrics.
+
+### Verification
+- Existing `tests/test_state.py`: 14/14 passed in the audit runtime.
+- Dependency-independent state/DB/ECharts/Timeline/Audio regression set: 40/40 passed.
+- `compileall` completed successfully for application and test Python files.
+- Full compatibility regression: 132/132 tests passed (the original 127 tests plus 5 new tests) using the real bundled Flask package. The bundled Groq installation contains a Python-3.12 native `pydantic_core` binary and cannot load under this audit environment's Python 3.13, so a temporary external import shim was used only to allow tests that already inject/mock the Groq network boundary to run. This is not a substitute for real Groq dependency verification in the project's native host environment.
+- Static security scan confirmed no external frontend URLs/CDNs and no unsafe dynamic HTML sinks.
+- Manual browser visual verification was not executed in this environment.
+
+### Remaining Productization Risks Identified
+The code is materially stronger, but it is still not a production SIEM/alert-processing platform without additional productization work: native OpenCanary-to-canonical event adaptation, webhook authentication/authorization and rate limiting, bounded/durable queue strategy, multi-asset/multi-incident correlation persistence, timestamp/schema normalization, control-plane authentication/CSRF protection, AI input/output consistency enforcement, operational observability, retention/backup policy, and deployment hardening remain separate engineering tasks.

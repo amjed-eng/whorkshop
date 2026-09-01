@@ -104,6 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function handleStateUpdate(payload) {
     document.getElementById('kpi-events').textContent = payload.event_count || 0;
     document.getElementById('kpi-status').textContent = payload.current_state || 'NORMAL';
+    if (payload.most_targeted_asset) {
+        document.getElementById('kpi-target').textContent = payload.most_targeted_asset;
+    }
     
     // Update body state class for critical pulse
     if (payload.current_state === 'CRITICAL_INTRUSION') {
@@ -118,6 +121,12 @@ function handleStateUpdate(payload) {
     if (payload.current_state === 'CONTAINED') {
         document.getElementById('kpi-status').textContent = 'THREAT CONTAINED';
         document.body.classList.remove('state-critical');
+    }
+
+    if (payload.current_state === 'EXECUTIVE') {
+        document.body.classList.add('executive-mode');
+    } else {
+        document.body.classList.remove('executive-mode');
     }
 
     updateTimeline(payload.timeline || []);
@@ -138,13 +147,8 @@ function handleEventUpdate(payload) {
     aiIndicator.classList.remove('hidden');
     document.getElementById('ai-content').classList.add('hidden');
 
-    updateTimeline(payload.timeline || []);
-
-    if (payload.current_state === 'CRITICAL_INTRUSION') {
-        document.body.classList.add('state-critical');
-        playCriticalAudio();
-    }
-    
+    // EVENT carries normalized evidence only. Risk/state/timeline arrive in the
+    // immediately following STATE frame, so do not clear or fabricate them here.
     if (payload.normalized) {
         updateCharts({
             current_risk: payload.current_risk, 
@@ -207,6 +211,19 @@ function handleReset() {
     }
 }
 
+function mapTargetToCityNode(targetService) {
+    const raw = String(targetService || '').trim();
+    const target = raw.toLowerCase();
+    if (!target) return '';
+
+    if (target.includes('vault') || target.includes('secret')) return 'Digital Vault';
+    if (target.includes('admin') || target.includes('management') || target.includes('ssh') || target.includes('rdp')) return 'Admin System';
+    if (target.includes('file') || target.includes('ftp') || target.includes('smb') || target.includes('nfs')) return 'File Service';
+    if (target.includes('web') || target.includes('http') || target.includes('https')) return 'Web Service';
+    if (target.includes('gateway') || target.includes('router') || target.includes('dns')) return 'Gateway';
+    return raw;
+}
+
 function updateCharts(payload) {
     if (riskGaugeChart && payload.current_risk !== undefined) {
         riskGaugeChart.setOption({
@@ -214,9 +231,9 @@ function updateCharts(payload) {
         });
     }
     if (networkMapChart && payload.source && payload.target_service) {
-        const source = payload.source;
-        const target = payload.target_service;
-        
+        const source = String(payload.source);
+        const target = mapTargetToCityNode(payload.target_service);
+
         const baseNodes = [
             { name: 'Internet' },
             { name: 'Gateway' },
@@ -225,16 +242,27 @@ function updateCharts(payload) {
             { name: 'Admin System' },
             { name: 'Digital Vault' }
         ];
-        
+
         const nodes = [...baseNodes];
         if (!nodes.find(n => n.name === source)) {
-            nodes.push({ name: source, itemStyle: { color: '#ff4444' } });
+            nodes.push({ name: source, itemStyle: { color: '#ff3b5f' } });
+        }
+        if (target && !nodes.find(n => n.name === target)) {
+            nodes.push({ name: target, itemStyle: { color: '#ffcc66' } });
+        }
+
+        const links = [];
+        if (source !== 'Gateway') {
+            links.push({ source: source, target: 'Gateway' });
+        }
+        if (target && target !== 'Gateway') {
+            links.push({ source: 'Gateway', target: target });
         }
 
         networkMapChart.setOption({
             series: [{
                 data: nodes,
-                links: [{ source: source, target: target }]
+                links: links
             }]
         });
     }
@@ -284,8 +312,16 @@ async function reconstructCrimeScene() {
     }
 }
 
-function toggleExecutiveSummary() {
-    document.body.classList.toggle('executive-mode');
+async function toggleExecutiveSummary() {
+    try {
+        const res = await fetch('/executive', { method: 'POST' });
+        if (!res.ok) {
+            throw new Error('Executive mode request failed');
+        }
+        document.body.classList.add('executive-mode');
+    } catch (e) {
+        console.error('Executive mode failed', e);
+    }
 }
 
 async function resetDemo() {
@@ -305,19 +341,26 @@ async function replayEvent(num) {
 }
 
 async function armAudio() {
-    audioArmed = true;
     const btn = document.getElementById('btn-arm-audio');
-    btn.classList.add('armed');
-    btn.textContent = 'AUDIO ARMED';
-    
+
     try {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextCtor) {
+            throw new Error('Web Audio API unavailable');
+        }
         if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            audioCtx = new AudioContextCtor();
         }
         if (audioCtx.state === 'suspended') {
             await audioCtx.resume();
         }
+        audioArmed = true;
+        btn.classList.add('armed');
+        btn.textContent = 'AUDIO ARMED';
     } catch (e) {
+        audioArmed = false;
+        btn.classList.remove('armed');
+        btn.textContent = 'AUDIO UNAVAILABLE';
         console.error('Failed to init AudioContext', e);
     }
 }

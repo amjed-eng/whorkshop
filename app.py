@@ -9,8 +9,6 @@ import db
 import state
 import ai_worker
 import telegram_worker
-
-import os
 import replay
 
 app = Flask(__name__)
@@ -231,16 +229,18 @@ def events_stream():
             subscribers.append(q)
             
         try:
-            # Send initial snapshot
+            # Send initial snapshot. Heartbeats are emitted inside the loop so an
+            # idle connection stays alive instead of ending after the first timeout.
             init_msg = json.dumps({"kind": "STATE", "payload": state.get_snapshot()})
             yield f"data: {init_msg}\n\n"
-            
+
             while True:
-                msg = q.get(timeout=15)
+                try:
+                    msg = q.get(timeout=15)
+                except queue.Empty:
+                    yield ": heartbeat\n\n"
+                    continue
                 yield msg
-        except queue.Empty:
-            # heartbeat
-            yield ": heartbeat\n\n"
         except GeneratorExit:
             return
         finally:
