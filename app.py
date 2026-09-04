@@ -1,5 +1,6 @@
 import os
 import json
+import hmac
 import hashlib
 import queue
 import threading
@@ -10,6 +11,11 @@ import state
 import ai_worker
 import telegram_worker
 import replay
+import opencanary_adapter
+
+OPENCANARY_WEBHOOK_TOKEN_ENV = "OPENCANARY_WEBHOOK_TOKEN"
+OPENCANARY_TOKEN_HEADER = "X-OpenCanary-Token"
+MAX_NATIVE_PAYLOAD_BYTES = 65536
 
 app = Flask(__name__)
 
@@ -147,9 +153,10 @@ def health():
     except Exception as e:
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
-def ingest_event(raw_event):
+def ingest_event(raw_event, evidence_source=None):
     normalized = normalize_event(raw_event)
-    event_hash = generate_hash(raw_event)
+    hash_source = evidence_source if evidence_source is not None else raw_event
+    event_hash = generate_hash(hash_source)
     
     # Save to DB first
     event_id = db.save_event(
@@ -209,6 +216,57 @@ def webhook_opencanary():
         app.logger.error(f"Failed to process webhook: {e}")
         return jsonify({"error": "Internal Server Error"}), 500
 
+def _current_risk_context():
+    snapshot = state.get_snapshot()
+    return {
+        "risk_score": int(snapshot["current_risk"]),
+        "stage": snapshot["current_stage"] or "Discovery",
+    }
+
+
+def _authorize_opencanary_token():
+    expected = os.environ.get(OPENCANARY_WEBHOOK_TOKEN_ENV)
+    if not expected:
+        return None
+    provided = request.headers.get(OPENCANARY_TOKEN_HEADER, "")
+    if not provided or not hmac.compare_digest(expected, provided):
+        return False
+    return True
+
+
+@app.route('/webhook/opencanary-native', methods=['POST'])
+def webhook_opencanary_native():
+    """
+    Receive a native OpenCanary WebhookHandler event, adapt it to the canonical
+    event model and push it through the same ingest_event() pipeline.
+
+    When OPENCANARY_WEBHOOK_TOKEN is set the request must carry a matching
+    X-OpenCanary-Token header. When the variable is unset (development mode)
+    the endpoint is left open and README documents that production must set it.
+    """
+    auth = _authorize_opencanary_token()
+    if auth is False:
+        return jsonify({"error": "Unauthorized"}), 401
+    if request.content_length is not None and request.content_length > MAX_NATIVE_PAYLOAD_BYTES:
+        return jsonify({"error": "Payload too large"}), 400
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"error": "Malformed JSON body"}), 400
+    try:
+        canonical = opencanary_adapter.adapt_native_event(payload)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    canonical["current_risk_context"] = _current_risk_context()
+    try:
+        res = ingest_event(canonical, evidence_source=payload)
+        return jsonify(res)
+    except Exception as e:
+        app.logger.error(f"Failed to process native OpenCanary event: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+
+
 @app.route('/demo/replay/<int:event_number>', methods=['POST'])
 def replay_event_route(event_number):
     try:
@@ -255,6 +313,7 @@ def reset_demo_route():
     state.reset_state()
     db.reset_demo()
     telegram_worker.reset_deduplication()
+    opencanary_adapter.reset_correlation()
     snapshot = state.get_snapshot()
     broadcast_message("RESET", snapshot)
     return jsonify({"status": "reset", "generation": snapshot["generation"]})

@@ -284,6 +284,20 @@ export OPEN_CANARY_WEBHOOK_URL='http://<opencanary-host>:<port>/<reachable-path>
 
 > This variable is a **reachability check**, not a native OpenCanary event adapter.
 
+### Native OpenCanary Webhook Token
+
+Optional shared secret protecting `POST /webhook/opencanary-native`. When set, the
+request must carry a matching `X-OpenCanary-Token` header:
+
+```bash
+export OPENCANARY_WEBHOOK_TOKEN='replace-with-a-long-random-secret'
+```
+
+The value is compared with `hmac.compare_digest`. When the variable is unset the
+native endpoint stays open for development and must be protected before production
+exposure. Set the same value in the OpenCanary WebhookHandler header and on the
+Flask host.
+
 ---
 
 ## 9. Starting the Application
@@ -364,21 +378,28 @@ An invalid payload returns HTTP `400`.
 
 ### Important OpenCanary note
 
-The route name is `/webhook/opencanary`, but the current implementation validates the **canonical project schema** above. A production-quality adapter that converts every native OpenCanary log format into this schema remains a separate productization task.
+There are two webhook intake routes that both end at the same `ingest_event()`:
 
-Therefore:
+- `POST /webhook/opencanary` — accepts the **canonical project schema** shown above.
+- `POST /webhook/opencanary-native` — accepts **native OpenCanary WebhookHandler
+  JSON** and converts it through `opencanary_adapter.py` into the canonical schema
+  above (see the "Native OpenCanary Integration" section).
+
+Native payloads are never accepted without mapping:
 
 ```text
 Native OpenCanary payload
         ↓
-[adapter/mapping still requires production hardening]
+opencanary_adapter.py  (parse + validate + map + correlate)
         ↓
 Canonical event above
         ↓
-INTRUDER INVISIBLE
+ingest_event()  →  SQLite / State / SSE / AI queue
 ```
 
-Do not assume an arbitrary native OpenCanary JSON packet will be accepted until its fields are mapped into this contract.
+Do not assume an arbitrary native OpenCanary JSON packet will be accepted until
+its fields are mapped into this contract. Unsupported logtypes and malformed
+payloads return HTTP `400`.
 
 ---
 
@@ -952,11 +973,16 @@ nmap -Pn -sV -p 22,80,445,3389 "$HONEYPOT_IP"
 If Nmap runs but the dashboard does not react:
 
 1. verify OpenCanary itself observed the scan;
-2. inspect the OpenCanary event payload;
-3. verify it is being mapped to the canonical schema documented above;
-4. verify the mapped event reaches `/webhook/opencanary`.
+2. inspect the OpenCanary event payload and confirm it matches the supported
+   WebhookHandler JSON shape (see "Native OpenCanary Integration");
+3. send it to `POST /webhook/opencanary-native` so `opencanary_adapter.py` maps
+   it to the canonical schema documented above;
+4. verify the mapped event reaches `ingest_event()`.
 
-The current repository does **not** claim universal native OpenCanary payload adaptation.
+The repository adapts the documented OpenCanary WebhookHandler format and the
+verified logtype families listed in the "Native OpenCanary Integration" section.
+It does **not** claim universal adaptation of arbitrary or unverified OpenCanary
+log formats; such payloads are rejected with HTTP `400` rather than guessed at.
 
 Only perform scanning against systems you own or are explicitly authorized to test.
 
@@ -1103,10 +1129,14 @@ The project includes stability tests for:
 
 - Groq API key read from environment only.
 - Telegram token/chat ID read from environment only.
+- Native OpenCanary webhook protected by optional shared secret
+  (`OPENCANARY_WEBHOOK_TOKEN`) compared with `hmac.compare_digest`; the secret is
+  never logged or echoed in responses/SSE.
 - Browser does not call Groq directly.
 - Browser does not receive Telegram secrets.
 - Raw event payload is not broadcast to the browser.
 - Raw event payload is not stored in SQLite; only its SHA-256 hash is stored.
+  For native events the hash covers the original OpenCanary evidence payload.
 - SQLite operations use independent connections.
 - AI structured output is locally validated.
 - Stale AI results are generation-protected.
@@ -1123,11 +1153,18 @@ The current project is intentionally compact. Before describing it as a true pro
 
 ### 1. Native OpenCanary adapter
 
-A tested translation layer is needed for real OpenCanary native log formats → canonical event schema.
+A translation layer for real OpenCanary native log formats → canonical event
+schema is implemented in `opencanary_adapter.py` and served at
+`POST /webhook/opencanary-native`. It supports the documented WebhookHandler JSON
+shape and the logtype families verified from the OpenCanary source. Broader
+module/logtype coverage beyond that verified set, mutually authenticated
+transport, rate limiting and replay protection remain open engineering tasks.
 
 ### 2. Webhook authentication
 
-`/webhook/opencanary` currently needs production controls such as:
+The native OpenCanary endpoint (`/webhook/opencanary-native`) supports a
+shared-secret token header today. `/webhook/opencanary` (the canonical intake)
+still needs production controls such as:
 
 - shared-secret/HMAC or mutually authenticated transport;
 - source allow-list where appropriate;
@@ -1331,7 +1368,7 @@ A complete engineering documentation package should ultimately include:
 11. **Verification & Test Strategy**
 12. **Frontend UX & Presenter Guide**
 
-The highest-priority next technical document is **Event Ingestion & Canonical Schema Specification**, because reliable native OpenCanary mapping is the largest gap between the current hardened prototype and true live ingestion.
+The highest-priority next technical document is **Event Ingestion & Canonical Schema Specification**, because the native OpenCanary adapter currently covers a verified logtype subset and a formal ingestion contract is the foundation for broadening coverage toward true live ingestion.
 
 ---
 
@@ -1375,7 +1412,9 @@ The highest-priority next technical document is **Event Ingestion & Canonical Sc
 - real Groq connectivity and credentials
 - real Telegram delivery
 - real OpenCanary reachability
-- native OpenCanary event mapping
+- live OpenCanary WebhookHandler payload shape against a real instance (the
+  adapter is unit/integration tested with fixtures verified against the
+  OpenCanary source; no live OpenCanary instance exists in this environment)
 - manual browser visual verification
 - network/firewall exposure
 
@@ -1461,3 +1500,117 @@ PHASE_3_TASK.md
 **INTRUDER INVISIBLE** demonstrates a deliberate security-engineering principle:
 
 > **The visible incident response should remain fast and understandable, while cloud intelligence and external notification remain asynchronous and failure-isolated.**
+
+---
+
+## 35. Native OpenCanary Integration
+
+This section documents how real OpenCanary events reach the same pipeline that
+Replay and the canonical webhook use. There is exactly one canonical ingestion
+function (`ingest_event()`); the native path never writes to SQLite, state, SSE,
+Groq or Telegram directly.
+
+### Data Flow
+
+```text
+Nmap / Attacker
+→ OpenCanary honeypot module
+→ OpenCanary WebhookHandler (HTTP POST)
+→ POST /webhook/opencanary-native
+→ opencanary_adapter.py (parse + validate + map + correlate)
+→ canonical event
+→ ingest_event()
+→ SQLite → State/Risk → SSE → Dashboard → AI queue → Telegram (on CRITICAL)
+```
+
+### Native Payload Contract
+
+OpenCanary's default WebhookHandler sends:
+
+```json
+{"message": "<JSON string>"}
+```
+
+where `<JSON string>` is the serialized native event. The adapter unwraps that
+JSON string safely (explicit `json.loads`, never `eval`) and also accepts a body
+that is already a native event object. Malformed payloads, a missing or invalid
+`src_host`, an invalid `dst_port`, and unsupported `logtype` values return HTTP
+`400` before anything is persisted or queued.
+
+Only the mapped canonical fields are stored/broadcast; the raw payload is used
+exclusively to compute `raw_event_hash` (the SHA-256 evidence fingerprint).
+
+### Nmap Logtype Mapping
+
+The Nmap/port-scan logtype constants are verified against the OpenCanary source
+(`opencanary/logger.py` `LoggerBase`, commit `86f0725`):
+
+| logtype | OpenCanary constant | canonical `event_type` |
+|---------|--------------------|------------------------|
+| 5001 | LOG_PORT_SYN | Port Scan |
+| 5002 | LOG_PORT_NMAPOS | Nmap OS Scan |
+| 5003 | LOG_PORT_NMAPNULL | Nmap NULL Scan |
+| 5004 | LOG_PORT_NMAPXMAS | Nmap XMAS Scan |
+| 5005 | LOG_PORT_NMAPFIN | Nmap FIN Scan |
+
+FTP (2000/2001), HTTP (3000–3003), SSH (4000–4002), SMB (5000), Telnet
+(6001/6002), HTTP proxy (7001), MySQL (8001) and RDP (14001) logtypes are mapped
+as well.
+
+### Service Mapping
+
+Destination ports map to service names: 21 → FTP, 22 → SSH, 23 → Telnet,
+80 → HTTP, 443 → HTTPS, 445 → SMB, 3306 → MySQL, 3389 → RDP (plus a few extra
+well-known ports). An unmapped port never drops the event; it becomes a safe
+label such as `Port 8080`, or the logtype protocol family when the event is a
+honeypot-module event.
+
+### Source Correlation
+
+Per-source correlation (thread-safe, in-memory) tracks related event count,
+targeted services and recent history so a source is never stuck at
+`attempt_count = 1`. `POST /demo/reset` clears this correlation together with
+state and SQLite. The adapter never decides risk itself; risk/stage decisions
+remain in `state.py`.
+
+### Environment
+
+- `OPENCANARY_WEBHOOK_TOKEN` — optional shared secret. When set, requests must
+  carry `X-OpenCanary-Token` with the same value (compared with
+  `hmac.compare_digest`). When unset the endpoint is open for development;
+  production must set it.
+
+### Setup
+
+1. Start Flask (`python app.py`) and note its reachable address, e.g.
+   `http://<FLASK_IP>:5000`. Do not hard-code an IP that is not your own.
+2. Choose a long random secret, export it in the Flask environment, and configure
+   OpenCanary's WebhookHandler with the same value. See
+   `config/opencanary-webhook.example.json` for a ready template:
+
+   - `class`: `opencanary.logger.WebhookHandler`
+   - `url`: `http://<FLASK_IP>:5000/webhook/opencanary-native`
+   - `method`: `POST`
+   - `data`: `{"message": "%(message)s"}`
+   - `status_code`: `200`
+   - `headers`: `{"Content-Type": "application/json",
+     "X-OpenCanary-Token": "<your-secret>"}`
+
+### Verification
+
+On a machine/lab you own and are authorized to test, after OpenCanary reports the
+probe the dashboard should react, SQLite evidence should appear and risk should
+rise:
+
+```bash
+nmap -Pn --top-ports 100 <HONEYPOT_IP>
+```
+
+```bash
+nmap -Pn -sV -p 21,22,80,443,445,3389 <HONEYPOT_IP>
+```
+
+Never target third-party or public systems. If no real OpenCanary instance is
+available, the shipped fixture tests in `tests/test_opencanary_adapter.py` and
+`tests/test_opencanary_native_webhook.py` exercise the full path with the
+verified payload shape.

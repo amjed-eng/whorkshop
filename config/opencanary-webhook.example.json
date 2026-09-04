@@ -1,0 +1,33 @@
+{
+  "_comment": "Example WebhookHandler block for OpenCanary. Copy the values under 'logger' into your opencanary.conf (data/.opencanary.conf). Replace <FLASK_IP> with the actual address of your Flask host and replace the X-OpenCanary-Token value with your own long random secret. Never commit real secrets or a universal IP.",
+  "device": {
+    "node_id": "canary-demo"
+  },
+  "logger": {
+    "class": "PyLogger",
+    "kwargs": {
+      "formatters": {},
+      "handlers": {
+        "Webhook": {
+          "class": "opencanary.logger.WebhookHandler",
+          "url": "http://<FLASK_IP>:5000/webhook/opencanary-native",
+          "method": "POST",
+          "data": {
+            "message": "%(message)s"
+          },
+          "status_code": 200,
+          "headers": {
+            "Content-Type": "application/json",
+            "X-OpenCanary-Token": "REPLACE_WITH_YOUR_LONG_RANDOM_SECRET"
+          }
+        }
+      }
+    }
+  },
+  "ip": {
+    "ignorelist": []
+  },
+  "logtype": {
+    "ignorelist": []
+  }
+}

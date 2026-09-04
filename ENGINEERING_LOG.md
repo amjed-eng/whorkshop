@@ -797,3 +797,67 @@ Full source review focused on real alert-processing behaviour, state correlation
 
 ### Remaining Productization Risks Identified
 The code is materially stronger, but it is still not a production SIEM/alert-processing platform without additional productization work: native OpenCanary-to-canonical event adaptation, webhook authentication/authorization and rate limiting, bounded/durable queue strategy, multi-asset/multi-incident correlation persistence, timestamp/schema normalization, control-plane authentication/CSRF protection, AI input/output consistency enforcement, operational observability, retention/backup policy, and deployment hardening remain separate engineering tasks.
+
+## Native OpenCanary Integration
+
+### Scope
+This round adds the missing native OpenCanary ingestion path. Real OpenCanary WebhookHandler events are converted to the existing canonical event model by a dedicated adapter and pushed through the same `ingest_event()` used by the live canonical webhook and Replay. No second ingestion pipeline, no direct DB/state/SSE/AI writes from native payloads.
+
+### Files added
+- `opencanary_adapter.py` — pure parsing/validation/mapping/correlation module (stdlib only; no Flask routes, DB, SSE, Groq, Telegram or state transitions).
+- `tests/test_opencanary_adapter.py` — adapter + Nmap logtype unit tests.
+- `tests/test_opencanary_native_webhook.py` — HTTP integration, pipeline and security tests.
+- `config/opencanary-webhook.example.json` — example OpenCanary WebhookHandler config block (placeholder IP/secret only).
+
+### Files modified
+- `app.py` — added `POST /webhook/opencanary-native` (validate -> parse -> adapt -> `ingest_event()`), token auth (`X-OpenCanary-Token` vs `OPENCANARY_WEBHOOK_TOKEN` via `hmac.compare_digest`), payload size limit, and reset hook clearing adapter correlation. `ingest_event()` gained an optional `evidence_source` used for hashing only; the canonical path is unchanged.
+- `README.md` — new "Native OpenCanary Integration" section; updated environment variables, canonical-webhook note, Nmap testing guidance, security properties and known-production-gap text.
+- `ENGINEERING_LOG.md` — this section.
+
+### Native payload contract
+OpenCanary's default `WebhookHandler` posts `{"message": "<JSON string>"}` (form/JSON). The documented configuration uses `Content-Type: application/json`, so the supported body shapes are:
+1. `{"message": "<serialized native event JSON string>"}` — unwrapped with explicit `json.loads` (never `eval`); and
+2. an already-object native event body.
+Sanitized native events carry `src_host`, `src_port`, `dst_host`, `dst_port`, `logtype`, `logdata`, `node_id`, `utc_time`, `local_time`, `local_time_adjusted`.
+
+Malformed JSON, missing/invalid `src_host`, invalid `dst_port` and unsupported `logtype` return HTTP `400` with no DB write, no state change and no AI queue task.
+
+### Logtype mappings verified
+Verified against thinkst/opencanary source commit `86f0725` (`opencanary/logger.py` `LoggerBase` and `opencanary/modules/portscan.py`):
+- `5001` LOG_PORT_SYN -> `Port Scan`
+- `5002` LOG_PORT_NMAPOS -> `Nmap OS Scan`
+- `5003` LOG_PORT_NMAPNULL -> `Nmap NULL Scan`
+- `5004` LOG_PORT_NMAPXMAS -> `Nmap XMAS Scan`
+- `5005` LOG_PORT_NMAPFIN -> `Nmap FIN Scan`
+Also mapped: FTP 2000/2001, HTTP 3000–3003, SSH 4000–4002, SMB 5000, Telnet 6001/6002, HTTP proxy 7001, MySQL 8001, RDP 14001. Other logtypes are rejected (400) rather than guessed.
+
+### Service mappings
+Ports 21/22/23/80/443/445/3306/3389 (+ a few well-known extras) map to service names. Unknown ports never drop an event (`Port 8080` style safe label); honeypot-module events fall back to the logtype protocol family when no useful port is present.
+
+### Correlation behavior
+Thread-safe in-memory per-`src_host` correlation tracks related event count, targeted services and bounded recent history. `attempt_count` increments per source across events and `previous_related_events` carries meaningful prior summaries. Risk/stage decisions remain exclusively in `state.py`; the adapter only describes activity and receives risk context from the current snapshot (injected by the route).
+
+### Security / token behavior
+- `OPENCANARY_WEBHOOK_TOKEN` env (optional). When set, the request header `X-OpenCanary-Token` must match via `hmac.compare_digest`; missing/incorrect tokens -> 401.
+- When unset (development) the endpoint is open; README documents that production must set it.
+- Token value is never logged, returned in a response, or present in SSE payloads.
+- Content-Type must be JSON; malformed bodies rejected; payload size capped (400); no stack traces returned to clients.
+
+### Reset behavior
+`POST /demo/reset` clears state, SQLite demo rows, Telegram dedup and the native adapter correlation together, so the same IP begins a fresh correlation after reset.
+
+### Unit / integration test results
+Added 41 tests covering the 35 required checks (adapter parsing/validation/port/timestamp/correlation/reset, Nmap logtype mapping, first-scan observation at risk 48, repeated-scan and multi-service correlation, no synchronous Groq/Telegram, scan->sensitive-admin escalation to 91, count-only benign activity staying non-critical, critical non-downgrade, single `ingest_event()` invocation, SQLite evidence, SSE EVENT/STATE, canonical AI queue task with raw-evidence hash, no raw payload in SSE, malformed -> no evidence/no AI task, and token accept/reject/leak checks).
+Baseline before this round: 132/132. Full suite after this round: see Final Report (expected 173/173).
+
+### Compile result
+`python3 -m compileall app.py db.py state.py ai_worker.py telegram_worker.py prompt.py replay.py opencanary_adapter.py preflight.py tests` passed.
+
+### Real OpenCanary/Nmap test result
+NOT EXECUTED. No OpenCanary instance exists in this environment, and no authorized live honeypot/lab network is available here. Logtype constants and the webhook payload shape were verified from the OpenCanary source at commit `86f0725` rather than from a live instance; adapter fixtures were built from that verified format.
+
+### Known limitations
+- Mapping covers the verified logtype subset; other OpenCanary module events return 400 rather than being guessed.
+- Correlation is in-memory (cleared on reset/restart), matching the existing architecture.
+- The raw native payload is not stored or broadcast; only its SHA-256 hash (`raw_event_hash`) represents the original evidence.
+- A live-format mismatch discovered against a real OpenCanary instance should be recorded as a fixture and the adapter adjusted rather than extended speculatively.
